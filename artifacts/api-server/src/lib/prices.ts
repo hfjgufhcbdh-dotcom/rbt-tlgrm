@@ -22,89 +22,107 @@ function formatPrice(value: number | null | undefined): string {
   return value.toLocaleString("fa-IR") + " تومان";
 }
 
-export async function fetchLivePrices(): Promise<PriceData> {
-  try {
-    const { data } = await axios.get(
-      "https://brsapi.ir/FreeTsetmcBrsApi/Api_Free_Gold_Currency_v2.json",
-      { timeout: 8000 }
-    );
+// tgju.org - widely accessible public market data API
+async function fetchFromTgju(): Promise<PriceData> {
+  const { data } = await axios.get("https://call.tgju.org/ajax.json", {
+    timeout: 10000,
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      Accept: "application/json",
+      Referer: "https://www.tgju.org/",
+    },
+  });
 
-    const gold = data?.gold ?? {};
-    const currency = data?.currency ?? {};
+  const current = data?.current ?? {};
 
-    const findCurrency = (code: string) =>
-      currency.find?.((c: { symbol: string }) => c.symbol === code);
+  const price = (key: string): string => {
+    const raw = current[key]?.p;
+    if (!raw) return "نامشخص";
+    const num = parseInt(String(raw).replace(/,/g, ""), 10);
+    return isNaN(num) ? "نامشخص" : formatPrice(Math.round(num / 10));
+  };
 
-    const usdObj = findCurrency("USD");
-    const eurObj = findCurrency("EUR");
-    const gbpObj = findCurrency("GBP");
-    const aedObj = findCurrency("AED");
-    const usdtObj = findCurrency("USDT");
-
-    return {
-      gold18: formatPrice(gold.gold_18),
-      gold24: formatPrice(gold.gold_24),
-      mithqal: formatPrice(gold.mithqal),
-      emamiCoin: formatPrice(gold.emami_coin),
-      baharCoin: formatPrice(gold.bahar_coin),
-      halfCoin: formatPrice(gold.half_coin),
-      quarterCoin: formatPrice(gold.quarter_coin),
-      usd: formatPrice(usdObj?.price),
-      eur: formatPrice(eurObj?.price),
-      gbp: formatPrice(gbpObj?.price),
-      aed: formatPrice(aedObj?.price),
-      usdt: formatPrice(usdtObj?.price),
-      updatedAt: new Date().toLocaleTimeString("fa-IR"),
-    };
-  } catch (err) {
-    logger.error({ err }, "Failed to fetch prices from primary API, trying fallback");
-    return fetchFallbackPrices();
-  }
+  return {
+    gold18: price("geram18"),
+    gold24: price("geram24"),
+    mithqal: price("mesghal"),
+    emamiCoin: price("sekee"),
+    baharCoin: price("sekeb"),
+    halfCoin: price("nim"),
+    quarterCoin: price("rob"),
+    usd: price("price_dollar_rl"),
+    eur: price("price_eur"),
+    gbp: price("price_gbp"),
+    aed: price("price_aed"),
+    usdt: price("crypto-tether"),
+    updatedAt: new Date().toLocaleTimeString("fa-IR"),
+  };
 }
 
-async function fetchFallbackPrices(): Promise<PriceData> {
+// navasan.tech public endpoint (no key required for basic data)
+async function fetchFromNavasan(): Promise<PriceData> {
+  const { data } = await axios.get(
+    "https://api.navasan.tech/latest/?api=free_usd_buy",
+    { timeout: 8000 }
+  );
+
+  const usdRial = data?.value ? parseInt(data.value, 10) : null;
+  const usdToman = usdRial ? Math.round(usdRial / 10) : null;
+
+  return {
+    gold18: "نامشخص",
+    gold24: "نامشخص",
+    mithqal: "نامشخص",
+    emamiCoin: "نامشخص",
+    baharCoin: "نامشخص",
+    halfCoin: "نامشخص",
+    quarterCoin: "نامشخص",
+    usd: usdToman ? formatPrice(usdToman) : "نامشخص",
+    eur: "نامشخص",
+    gbp: "نامشخص",
+    aed: "نامشخص",
+    usdt: "نامشخص",
+    updatedAt: new Date().toLocaleTimeString("fa-IR"),
+  };
+}
+
+let lastSuccessfulData: PriceData | null = null;
+
+export async function fetchLivePrices(): Promise<PriceData> {
+  // Try primary: tgju.org
   try {
-    const { data } = await axios.get(
-      "https://api.accessban.com/v1/market/indicator/summary-data-compact",
-      { timeout: 8000 }
-    );
-
-    const get = (key: string) => {
-      const item = data?.data?.[key];
-      return item ? formatPrice(Number(item.p)) : "نامشخص";
-    };
-
-    return {
-      gold18: get("geram18"),
-      gold24: get("geram24"),
-      mithqal: get("mesghal"),
-      emamiCoin: get("emami"),
-      baharCoin: get("bahar"),
-      halfCoin: get("nim"),
-      quarterCoin: get("rob"),
-      usd: get("dollar"),
-      eur: get("euro"),
-      gbp: get("pound"),
-      aed: get("dirham"),
-      usdt: get("tether"),
-      updatedAt: new Date().toLocaleTimeString("fa-IR"),
-    };
+    const result = await fetchFromTgju();
+    lastSuccessfulData = result;
+    return result;
   } catch (err) {
-    logger.error({ err }, "Fallback API also failed");
+    logger.warn({ err: (err as Error).message }, "tgju.org failed, trying navasan");
+  }
+
+  // Try secondary: navasan.tech
+  try {
+    const result = await fetchFromNavasan();
+    lastSuccessfulData = result;
+    return result;
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "navasan.tech also failed");
+  }
+
+  // Return last known good data if available
+  if (lastSuccessfulData) {
+    logger.warn("All APIs failed, returning last known prices");
     return {
-      gold18: "خطا در دریافت",
-      gold24: "خطا در دریافت",
-      mithqal: "خطا در دریافت",
-      emamiCoin: "خطا در دریافت",
-      baharCoin: "خطا در دریافت",
-      halfCoin: "خطا در دریافت",
-      quarterCoin: "خطا در دریافت",
-      usd: "خطا در دریافت",
-      eur: "خطا در دریافت",
-      gbp: "خطا در دریافت",
-      aed: "خطا در دریافت",
-      usdt: "خطا در دریافت",
-      updatedAt: new Date().toLocaleTimeString("fa-IR"),
+      ...lastSuccessfulData,
+      updatedAt: lastSuccessfulData.updatedAt + " (قدیمی)",
     };
   }
+
+  // Final fallback: return error state
+  logger.error("All price APIs failed and no cached data available");
+  const na = "خطا در دریافت";
+  return {
+    gold18: na, gold24: na, mithqal: na,
+    emamiCoin: na, baharCoin: na, halfCoin: na, quarterCoin: na,
+    usd: na, eur: na, gbp: na, aed: na, usdt: na,
+    updatedAt: new Date().toLocaleTimeString("fa-IR"),
+  };
 }
