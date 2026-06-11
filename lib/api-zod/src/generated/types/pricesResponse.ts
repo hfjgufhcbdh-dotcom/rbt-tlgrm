@@ -5,9 +5,6 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export interface HealthStatus {
-  status: string;
-}
 
 export interface PricesResponse {
   gold18: string;
@@ -24,4 +21,3 @@ export interface PricesResponse {
   usdt: string;
   updatedAt: string;
 }
-

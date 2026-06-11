@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: prices
+    description: Live market price operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /prices:
+    get:
+      operationId: getPrices
+      tags: [prices]
+      summary: Get live gold, coin, and currency prices
+      description: Fetches live prices from Iranian market APIs
+      responses:
+        "200":
+          description: Current prices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricesResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +48,46 @@ components:
           type: string
       required:
         - status
-
+    PricesResponse:
+      type: object
+      properties:
+        gold18:
+          type: string
+        gold24:
+          type: string
+        mithqal:
+          type: string
+        emamiCoin:
+          type: string
+        baharCoin:
+          type: string
+        halfCoin:
+          type: string
+        quarterCoin:
+          type: string
+        usd:
+          type: string
+        eur:
+          type: string
+        gbp:
+          type: string
+        aed:
+          type: string
+        usdt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - gold18
+        - gold24
+        - mithqal
+        - emamiCoin
+        - baharCoin
+        - halfCoin
+        - quarterCoin
+        - usd
+        - eur
+        - gbp
+        - aed
+        - usdt
+        - updatedAt
