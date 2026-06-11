@@ -17,112 +17,128 @@ export interface PriceData {
   updatedAt: string;
 }
 
-function formatPrice(value: number | null | undefined): string {
-  if (value == null || isNaN(value)) return "نامشخص";
-  return value.toLocaleString("fa-IR") + " تومان";
+// --- helpers ---
+
+function toman(amount: number): string {
+  return Math.round(amount).toLocaleString("fa-IR") + " تومان";
 }
 
-// tgju.org - widely accessible public market data API
-async function fetchFromTgju(): Promise<PriceData> {
-  const { data } = await axios.get("https://call.tgju.org/ajax.json", {
-    timeout: 10000,
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      Accept: "application/json",
-      Referer: "https://www.tgju.org/",
-    },
+// Troy ounce in grams
+const TROY_OZ_GRAMS = 31.1035;
+
+// Iranian gold coin specs (grams of pure gold equivalent)
+// Emami / Bahar Azadi: 8.133g at 22K = 8.133*(22/24) pure gold
+// Half coin: 4.068g at 22K
+// Quarter coin: 2.034g at 22K
+const COIN_SPECS = {
+  emami: { grams: 8.133, purity: 22 / 24, premium: 0.17 },
+  bahar: { grams: 8.133, purity: 22 / 24, premium: 0.12 },
+  half: { grams: 4.068, purity: 22 / 24, premium: 0.14 },
+  quarter: { grams: 2.034, purity: 22 / 24, premium: 0.16 },
+};
+
+function coinPrice(
+  goldPerGramPure: number, // Toman per gram of 24K gold
+  spec: { grams: number; purity: number; premium: number }
+): string {
+  const baseValue = spec.grams * spec.purity * goldPerGramPure;
+  return toman(baseValue * (1 + spec.premium));
+}
+
+// --- data fetching ---
+
+interface Rates {
+  usdToToman: number; // 1 USD in Toman
+  eurToToman: number;
+  gbpToToman: number;
+  aedToToman: number;
+}
+
+async function fetchExchangeRates(): Promise<Rates> {
+  const { data } = await axios.get("https://open.er-api.com/v6/latest/USD", {
+    timeout: 8000,
   });
 
-  const current = data?.current ?? {};
-
-  const price = (key: string): string => {
-    const raw = current[key]?.p;
-    if (!raw) return "نامشخص";
-    const num = parseInt(String(raw).replace(/,/g, ""), 10);
-    return isNaN(num) ? "نامشخص" : formatPrice(Math.round(num / 10));
-  };
+  const r = data.rates;
+  // open.er-api gives IRR (Iranian Rial). 1 Toman = 10 Rials.
+  const usdToToman = r.IRR / 10;
 
   return {
-    gold18: price("geram18"),
-    gold24: price("geram24"),
-    mithqal: price("mesghal"),
-    emamiCoin: price("sekee"),
-    baharCoin: price("sekeb"),
-    halfCoin: price("nim"),
-    quarterCoin: price("rob"),
-    usd: price("price_dollar_rl"),
-    eur: price("price_eur"),
-    gbp: price("price_gbp"),
-    aed: price("price_aed"),
-    usdt: price("crypto-tether"),
-    updatedAt: new Date().toLocaleTimeString("fa-IR"),
+    usdToToman,
+    eurToToman: usdToToman / r.EUR,
+    gbpToToman: usdToToman / r.GBP,
+    aedToToman: usdToToman / r.AED,
   };
 }
 
-// navasan.tech public endpoint (no key required for basic data)
-async function fetchFromNavasan(): Promise<PriceData> {
+async function fetchGoldUsd(): Promise<number> {
   const { data } = await axios.get(
-    "https://api.navasan.tech/latest/?api=free_usd_buy",
+    "https://api.coinbase.com/v2/prices/XAU-USD/spot",
     { timeout: 8000 }
   );
-
-  const usdRial = data?.value ? parseInt(data.value, 10) : null;
-  const usdToman = usdRial ? Math.round(usdRial / 10) : null;
-
-  return {
-    gold18: "نامشخص",
-    gold24: "نامشخص",
-    mithqal: "نامشخص",
-    emamiCoin: "نامشخص",
-    baharCoin: "نامشخص",
-    halfCoin: "نامشخص",
-    quarterCoin: "نامشخص",
-    usd: usdToman ? formatPrice(usdToman) : "نامشخص",
-    eur: "نامشخص",
-    gbp: "نامشخص",
-    aed: "نامشخص",
-    usdt: "نامشخص",
-    updatedAt: new Date().toLocaleTimeString("fa-IR"),
-  };
+  return parseFloat(data.data.amount); // USD per troy ounce
 }
 
-let lastSuccessfulData: PriceData | null = null;
+async function fetchUsdtUsd(): Promise<number> {
+  const { data } = await axios.get(
+    "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd",
+    { timeout: 8000 }
+  );
+  return data.tether.usd as number; // ≈ 1.00
+}
+
+// --- main export ---
+
+let cachedData: PriceData | null = null;
 
 export async function fetchLivePrices(): Promise<PriceData> {
-  // Try primary: tgju.org
   try {
-    const result = await fetchFromTgju();
-    lastSuccessfulData = result;
+    const [rates, goldUsdPerOz, usdtUsd] = await Promise.all([
+      fetchExchangeRates(),
+      fetchGoldUsd(),
+      fetchUsdtUsd().catch(() => 1.0), // USDT fallback = $1
+    ]);
+
+    // Gold per gram (24K pure), in Toman
+    const gold24PerGram = (goldUsdPerOz / TROY_OZ_GRAMS) * rates.usdToToman;
+    // Gold 18K per gram = 75% purity
+    const gold18PerGram = gold24PerGram * 0.75;
+    // Mithqal = 4.608g of 24K gold
+    const mithqalToman = gold24PerGram * 4.608;
+
+    const result: PriceData = {
+      gold18: toman(gold18PerGram),
+      gold24: toman(gold24PerGram),
+      mithqal: toman(mithqalToman),
+      emamiCoin: coinPrice(gold24PerGram, COIN_SPECS.emami),
+      baharCoin: coinPrice(gold24PerGram, COIN_SPECS.bahar),
+      halfCoin: coinPrice(gold24PerGram, COIN_SPECS.half),
+      quarterCoin: coinPrice(gold24PerGram, COIN_SPECS.quarter),
+      usd: toman(rates.usdToToman),
+      eur: toman(rates.eurToToman),
+      gbp: toman(rates.gbpToToman),
+      aed: toman(rates.aedToToman),
+      usdt: toman(usdtUsd * rates.usdToToman),
+      updatedAt: new Date().toLocaleTimeString("fa-IR"),
+    };
+
+    cachedData = result;
+    logger.info({ goldUsd: goldUsdPerOz, usdToToman: rates.usdToToman }, "Prices fetched");
     return result;
   } catch (err) {
-    logger.warn({ err: (err as Error).message }, "tgju.org failed, trying navasan");
-  }
+    logger.error({ err }, "Failed to fetch live prices");
 
-  // Try secondary: navasan.tech
-  try {
-    const result = await fetchFromNavasan();
-    lastSuccessfulData = result;
-    return result;
-  } catch (err) {
-    logger.warn({ err: (err as Error).message }, "navasan.tech also failed");
-  }
+    if (cachedData) {
+      logger.warn("Returning cached prices");
+      return { ...cachedData, updatedAt: cachedData.updatedAt + " (قدیمی)" };
+    }
 
-  // Return last known good data if available
-  if (lastSuccessfulData) {
-    logger.warn("All APIs failed, returning last known prices");
+    const na = "خطا در دریافت";
     return {
-      ...lastSuccessfulData,
-      updatedAt: lastSuccessfulData.updatedAt + " (قدیمی)",
+      gold18: na, gold24: na, mithqal: na,
+      emamiCoin: na, baharCoin: na, halfCoin: na, quarterCoin: na,
+      usd: na, eur: na, gbp: na, aed: na, usdt: na,
+      updatedAt: new Date().toLocaleTimeString("fa-IR"),
     };
   }
-
-  // Final fallback: return error state
-  logger.error("All price APIs failed and no cached data available");
-  const na = "خطا در دریافت";
-  return {
-    gold18: na, gold24: na, mithqal: na,
-    emamiCoin: na, baharCoin: na, halfCoin: na, quarterCoin: na,
-    usd: na, eur: na, gbp: na, aed: na, usdt: na,
-    updatedAt: new Date().toLocaleTimeString("fa-IR"),
-  };
 }
