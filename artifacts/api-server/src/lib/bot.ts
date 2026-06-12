@@ -2,11 +2,13 @@ import TelegramBot from "node-telegram-bot-api";
 import { fetchLivePrices } from "./prices";
 import { logger } from "./logger";
 import { db } from "@workspace/db";
-import { alertsTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { alertsTable, usersTable } from "@workspace/db/schema";
+import { eq, and, count } from "drizzle-orm";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN environment variable is required");
+
+const OWNER_ID = 7487104813;
 
 export const bot = new TelegramBot(TOKEN, { polling: true });
 
@@ -161,10 +163,45 @@ const directionKeyboard = (asset: string) => ({
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   logger.info({ chatId, user: msg.from?.username }, "User started bot");
+
+  // Upsert user into DB
+  try {
+    await db
+      .insert(usersTable)
+      .values({
+        chatId,
+        username: msg.from?.username ?? null,
+        firstName: msg.from?.first_name ?? null,
+      })
+      .onConflictDoUpdate({
+        target: usersTable.chatId,
+        set: {
+          username: msg.from?.username ?? null,
+          firstName: msg.from?.first_name ?? null,
+          lastSeenAt: new Date(),
+        },
+      });
+  } catch (err) {
+    logger.error({ err }, "Failed to upsert user");
+  }
+
   await bot.sendMessage(chatId, WELCOME, {
     parse_mode: "Markdown",
     reply_markup: mainKeyboard,
   });
+});
+
+// ─── /stats (owner only) ──────────────────────────────────────────────────────
+bot.onText(/\/stats/, async (msg) => {
+  if (msg.from?.id !== OWNER_ID) return;
+  const chatId = msg.chat.id;
+  try {
+    const [{ total }] = await db.select({ total: count() }).from(usersTable);
+    await bot.sendMessage(chatId, `👥 تعداد کاربران: ${total}`);
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch user count");
+    await bot.sendMessage(chatId, "❌ خطا در دریافت آمار");
+  }
 });
 
 // ─── Text input handler (price entry for alerts) ──────────────────────────────
