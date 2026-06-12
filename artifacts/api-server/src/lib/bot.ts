@@ -193,10 +193,13 @@ bot.onText(/\/start/, async (msg) => {
 
 // ─── /stats (owner only) ──────────────────────────────────────────────────────
 bot.onText(/\/stats/, async (msg) => {
-  if (msg.from?.id !== OWNER_ID) return;
+  const fromId = msg.from?.id;
+  logger.info({ fromId, OWNER_ID, match: fromId === OWNER_ID }, "/stats command received");
+  if (fromId !== OWNER_ID) return;
   const chatId = msg.chat.id;
   try {
-    const [{ total }] = await db.select({ total: count() }).from(usersTable);
+    const rows = await db.select({ total: count() }).from(usersTable);
+    const total = rows[0]?.total ?? 0;
     await bot.sendMessage(chatId, `👥 تعداد کاربران: ${total}`);
   } catch (err) {
     logger.error({ err }, "Failed to fetch user count");
