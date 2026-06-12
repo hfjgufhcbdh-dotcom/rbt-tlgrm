@@ -2,13 +2,11 @@ import TelegramBot from "node-telegram-bot-api";
 import { fetchLivePrices } from "./prices";
 import { logger } from "./logger";
 import { db } from "@workspace/db";
-import { alertsTable, usersTable } from "@workspace/db/schema";
-import { eq, and, count, sql } from "drizzle-orm";
+import { alertsTable } from "@workspace/db/schema";
+import { eq, and } from "drizzle-orm";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN environment variable is required");
-
-const OWNER_ID = 13456789;
 
 export const bot = new TelegramBot(TOKEN, { polling: true });
 
