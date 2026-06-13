@@ -36,6 +36,7 @@ const mainKeyboard = {
     [{ text: "🥇 قیمت طلا", callback_data: "gold" }],
     [{ text: "🪙 قیمت سکه", callback_data: "coin" }],
     [{ text: "💵 قیمت ارز", callback_data: "currency" }],
+    [{ text: "💎 ارز دیجیتال", callback_data: "crypto" }],
     [{ text: "📊 همه قیمت‌ها", callback_data: "all" }],
     [{ text: "🔔 هشدار قیمت", callback_data: "alerts_menu" }],
   ],
@@ -94,6 +95,18 @@ async function getCurrencyText() {
   );
 }
 
+async function getCryptoText() {
+  const p = await fetchLivePrices();
+  return (
+    `💎 *ارز دیجیتال*\n\n` +
+    `💎 تون \\(TON\\): \`${p.ton}\`\n` +
+    `🐹 همستر \\(HMSTR\\): \`${p.hmstr}\`\n` +
+    `🐶 داگز \\(DOGS\\): \`${p.dogs}\`\n` +
+    `₮ تتر \\(USDT\\): \`${p.usdt}\`\n\n` +
+    `🕐 آخرین بروزرسانی: ${p.updatedAt}`
+  );
+}
+
 async function getAllText() {
   const p = await fetchLivePrices();
   return (
@@ -113,6 +126,10 @@ async function getAllText() {
     `🇬🇧 پوند: \`${p.gbp}\`\n` +
     `🇦🇪 درهم: \`${p.aed}\`\n` +
     `₮ تتر: \`${p.usdt}\`\n\n` +
+    `━━━━━━━━ 💎 کریپتو ━━━━━━━━\n` +
+    `💎 تون \\(TON\\): \`${p.ton}\`\n` +
+    `🐹 همستر \\(HMSTR\\): \`${p.hmstr}\`\n` +
+    `🐶 داگز \\(DOGS\\): \`${p.dogs}\`\n\n` +
     `🕐 آخرین بروزرسانی: ${p.updatedAt}`
   );
 }
@@ -274,11 +291,12 @@ bot.on("callback_query", async (query) => {
 
     // ── Price sections ──
     const section = data.startsWith("refresh_") ? data.replace("refresh_", "") : data;
-    if (["gold", "coin", "currency", "all"].includes(section)) {
+    if (["gold", "coin", "currency", "crypto", "all"].includes(section)) {
       let text = "";
       if (section === "gold") text = await getGoldText();
       else if (section === "coin") text = await getCoinText();
       else if (section === "currency") text = await getCurrencyText();
+      else if (section === "crypto") text = await getCryptoText();
       else text = await getAllText();
 
       await bot.editMessageText(text, {
