@@ -13,6 +13,7 @@ export interface PriceData {
   eur: string;
   gbp: string;
   aed: string;
+  afn: string;
   usdt: string;
   ton: string;
   hmstr: string;
@@ -55,6 +56,7 @@ interface Rates {
   eurToToman: number;
   gbpToToman: number;
   aedToToman: number;
+  afnToToman: number;
 }
 
 async function fetchExchangeRates(): Promise<Rates> {
@@ -66,6 +68,7 @@ async function fetchExchangeRates(): Promise<Rates> {
     eurToToman: usdToToman / r.EUR,
     gbpToToman: usdToToman / r.GBP,
     aedToToman: usdToToman / r.AED,
+    afnToToman: usdToToman / r.AFN,
   };
 }
 
@@ -130,6 +133,7 @@ export async function fetchLivePrices(): Promise<PriceData> {
       eur:  toman(rates.eurToToman),
       gbp:  toman(rates.gbpToToman),
       aed:  toman(rates.aedToToman),
+      afn:  toman(rates.afnToToman),
       usdt: toman(crypto.usdt * rates.usdToToman),
       ton:  `${usd(crypto.ton)} | ${toman(crypto.ton * rates.usdToToman)}`,
       hmstr:`${usd(crypto.hmstr)} | ${toman(crypto.hmstr * rates.usdToToman)}`,
@@ -156,7 +160,7 @@ export async function fetchLivePrices(): Promise<PriceData> {
     return {
       gold18: na, gold24: na, mithqal: na,
       emamiCoin: na, baharCoin: na, halfCoin: na, quarterCoin: na,
-      usd: na, eur: na, gbp: na, aed: na, usdt: na,
+      usd: na, eur: na, gbp: na, aed: na, afn: na, usdt: na,
       ton: na, hmstr: na, dogs: na, star: na, not: na, btc: na, eth: na,
       updatedAt: new Date().toLocaleTimeString("fa-IR"),
     };
