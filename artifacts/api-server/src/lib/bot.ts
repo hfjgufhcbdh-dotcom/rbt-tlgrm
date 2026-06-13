@@ -102,6 +102,7 @@ async function getCryptoText() {
     `💎 تون \\(TON\\): \`${p.ton}\`\n` +
     `🐹 همستر \\(HMSTR\\): \`${p.hmstr}\`\n` +
     `🐶 داگز \\(DOGS\\): \`${p.dogs}\`\n` +
+    `⭐ استار \\(STAR\\): \`${p.star}\`\n` +
     `₮ تتر \\(USDT\\): \`${p.usdt}\`\n\n` +
     `🕐 آخرین بروزرسانی: ${p.updatedAt}`
   );
@@ -129,7 +130,8 @@ async function getAllText() {
     `━━━━━━━━ 💎 کریپتو ━━━━━━━━\n` +
     `💎 تون \\(TON\\): \`${p.ton}\`\n` +
     `🐹 همستر \\(HMSTR\\): \`${p.hmstr}\`\n` +
-    `🐶 داگز \\(DOGS\\): \`${p.dogs}\`\n\n` +
+    `🐶 داگز \\(DOGS\\): \`${p.dogs}\`\n` +
+    `⭐ استار \\(STAR\\): \`${p.star}\`\n\n` +
     `🕐 آخرین بروزرسانی: ${p.updatedAt}`
   );
 }

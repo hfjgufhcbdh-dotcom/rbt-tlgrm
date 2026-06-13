@@ -17,6 +17,7 @@ export interface PriceData {
   ton: string;
   hmstr: string;
   dogs: string;
+  star: string;
   updatedAt: string;
 }
 
@@ -75,18 +76,20 @@ interface CryptoRates {
   ton: number;
   hmstr: number;
   dogs: number;
+  star: number;
 }
 
 async function fetchCryptoUsd(): Promise<CryptoRates> {
   const { data } = await axios.get(
-    "https://api.coingecko.com/api/v3/simple/price?ids=tether,the-open-network,hamster-kombat,dogs&vs_currencies=usd",
+    "https://api.coingecko.com/api/v3/simple/price?ids=tether,the-open-network,hamster-kombat,dogs,star&vs_currencies=usd",
     { timeout: 8000 }
   );
   return {
-    usdt: data["tether"]?.usd ?? 1,
-    ton:  data["the-open-network"]?.usd ?? 0,
+    usdt:  data["tether"]?.usd ?? 1,
+    ton:   data["the-open-network"]?.usd ?? 0,
     hmstr: data["hamster-kombat"]?.usd ?? 0,
-    dogs: data["dogs"]?.usd ?? 0,
+    dogs:  data["dogs"]?.usd ?? 0,
+    star:  data["star"]?.usd ?? 0,
   };
 }
 
@@ -122,6 +125,7 @@ export async function fetchLivePrices(): Promise<PriceData> {
       ton:  `${usd(crypto.ton)} | ${toman(crypto.ton * rates.usdToToman)}`,
       hmstr:`${usd(crypto.hmstr)} | ${toman(crypto.hmstr * rates.usdToToman)}`,
       dogs: `${usd(crypto.dogs)} | ${toman(crypto.dogs * rates.usdToToman)}`,
+      star: `${usd(crypto.star)} | ${toman(crypto.star * rates.usdToToman)}`,
       updatedAt: new Date().toLocaleTimeString("fa-IR"),
     };
 
@@ -141,7 +145,7 @@ export async function fetchLivePrices(): Promise<PriceData> {
       gold18: na, gold24: na, mithqal: na,
       emamiCoin: na, baharCoin: na, halfCoin: na, quarterCoin: na,
       usd: na, eur: na, gbp: na, aed: na, usdt: na,
-      ton: na, hmstr: na, dogs: na,
+      ton: na, hmstr: na, dogs: na, star: na,
       updatedAt: new Date().toLocaleTimeString("fa-IR"),
     };
   }
