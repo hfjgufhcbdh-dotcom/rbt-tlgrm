@@ -17,7 +17,15 @@ const ASSET_LABELS: Record<keyof PriceData, string> = {
   eur: "یورو",
   gbp: "پوند",
   aed: "درهم",
+  afn: "افغانی",
   usdt: "تتر",
+  ton: "تون",
+  hmstr: "همستر",
+  dogs: "داگز",
+  star: "استار",
+  not: "نات‌کوین",
+  btc: "بیت‌کوین",
+  eth: "اتریوم",
   updatedAt: "updatedAt",
 };
 

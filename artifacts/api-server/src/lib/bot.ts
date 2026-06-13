@@ -501,8 +501,26 @@ bot.on("callback_query", async (query) => {
   }
 });
 
-bot.on("polling_error", (err) => {
-  logger.error({ err }, "Telegram polling error");
+bot.on("polling_error", (err: any) => {
+  logger.error({ code: err.code, message: err.message }, "Telegram polling error");
+
+  // EFATAL means polling has completely stopped — restart it
+  if (err.code === "EFATAL") {
+    logger.warn("Fatal polling error — restarting polling in 10s");
+    setTimeout(() => {
+      bot.startPolling({ restart: true }).catch((e) => {
+        logger.error({ e }, "Failed to restart polling");
+      });
+    }, 10_000);
+  }
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error({ reason }, "Unhandled promise rejection");
+});
+
+process.on("uncaughtException", (err) => {
+  logger.error({ err }, "Uncaught exception");
 });
 
 logger.info("Telegram bot started");
