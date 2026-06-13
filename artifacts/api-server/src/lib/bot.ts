@@ -285,7 +285,14 @@ bot.on("callback_query", async (query) => {
   const msgId = query.message.message_id;
   const data = query.data ?? "";
 
-  await bot.answerCallbackQuery(query.id);
+  // Silently ignore expired callback queries (bot was asleep, query timed out)
+  try {
+    await bot.answerCallbackQuery(query.id);
+  } catch (e: any) {
+    if (e?.message?.includes("query is too old") || e?.message?.includes("query ID is invalid")) {
+      return; // stale query — discard silently
+    }
+  }
 
   try {
     // ── Main menu ──
