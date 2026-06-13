@@ -18,6 +18,9 @@ export interface PriceData {
   hmstr: string;
   dogs: string;
   star: string;
+  not: string;
+  btc: string;
+  eth: string;
   updatedAt: string;
 }
 
@@ -77,11 +80,14 @@ interface CryptoRates {
   hmstr: number;
   dogs: number;
   star: number;
+  not: number;
+  btc: number;
+  eth: number;
 }
 
 async function fetchCryptoUsd(): Promise<CryptoRates> {
   const { data } = await axios.get(
-    "https://api.coingecko.com/api/v3/simple/price?ids=tether,the-open-network,hamster-kombat,dogs,star&vs_currencies=usd",
+    "https://api.coingecko.com/api/v3/simple/price?ids=tether,the-open-network,hamster-kombat,dogs,star,notcoin,bitcoin,ethereum&vs_currencies=usd",
     { timeout: 8000 }
   );
   return {
@@ -90,6 +96,9 @@ async function fetchCryptoUsd(): Promise<CryptoRates> {
     hmstr: data["hamster-kombat"]?.usd ?? 0,
     dogs:  data["dogs"]?.usd ?? 0,
     star:  data["star"]?.usd ?? 0,
+    not:   data["notcoin"]?.usd ?? 0,
+    btc:   data["bitcoin"]?.usd ?? 0,
+    eth:   data["ethereum"]?.usd ?? 0,
   };
 }
 
@@ -126,6 +135,9 @@ export async function fetchLivePrices(): Promise<PriceData> {
       hmstr:`${usd(crypto.hmstr)} | ${toman(crypto.hmstr * rates.usdToToman)}`,
       dogs: `${usd(crypto.dogs)} | ${toman(crypto.dogs * rates.usdToToman)}`,
       star: `${usd(crypto.star)} | ${toman(crypto.star * rates.usdToToman)}`,
+      not:  `${usd(crypto.not)} | ${toman(crypto.not * rates.usdToToman)}`,
+      btc:  `${usd(crypto.btc)} | ${toman(crypto.btc * rates.usdToToman)}`,
+      eth:  `${usd(crypto.eth)} | ${toman(crypto.eth * rates.usdToToman)}`,
       updatedAt: new Date().toLocaleTimeString("fa-IR"),
     };
 
@@ -145,7 +157,7 @@ export async function fetchLivePrices(): Promise<PriceData> {
       gold18: na, gold24: na, mithqal: na,
       emamiCoin: na, baharCoin: na, halfCoin: na, quarterCoin: na,
       usd: na, eur: na, gbp: na, aed: na, usdt: na,
-      ton: na, hmstr: na, dogs: na, star: na,
+      ton: na, hmstr: na, dogs: na, star: na, not: na, btc: na, eth: na,
       updatedAt: new Date().toLocaleTimeString("fa-IR"),
     };
   }

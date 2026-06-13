@@ -99,10 +99,13 @@ async function getCryptoText() {
   const p = await fetchLivePrices();
   return (
     `💎 *ارز دیجیتال*\n\n` +
+    `₿ بیت‌کوین \\(BTC\\): \`${p.btc}\`\n` +
+    `🔷 اتریوم \\(ETH\\): \`${p.eth}\`\n` +
     `💎 تون \\(TON\\): \`${p.ton}\`\n` +
     `🐹 همستر \\(HMSTR\\): \`${p.hmstr}\`\n` +
     `🐶 داگز \\(DOGS\\): \`${p.dogs}\`\n` +
     `⭐ استار \\(STAR\\): \`${p.star}\`\n` +
+    `🔴 نات‌کوین \\(NOT\\): \`${p.not}\`\n` +
     `₮ تتر \\(USDT\\): \`${p.usdt}\`\n\n` +
     `🕐 آخرین بروزرسانی: ${p.updatedAt}`
   );
@@ -128,10 +131,13 @@ async function getAllText() {
     `🇦🇪 درهم: \`${p.aed}\`\n` +
     `₮ تتر: \`${p.usdt}\`\n\n` +
     `━━━━━━━━ 💎 کریپتو ━━━━━━━━\n` +
+    `₿ بیت‌کوین \\(BTC\\): \`${p.btc}\`\n` +
+    `🔷 اتریوم \\(ETH\\): \`${p.eth}\`\n` +
     `💎 تون \\(TON\\): \`${p.ton}\`\n` +
     `🐹 همستر \\(HMSTR\\): \`${p.hmstr}\`\n` +
     `🐶 داگز \\(DOGS\\): \`${p.dogs}\`\n` +
-    `⭐ استار \\(STAR\\): \`${p.star}\`\n\n` +
+    `⭐ استار \\(STAR\\): \`${p.star}\`\n` +
+    `🔴 نات‌کوین \\(NOT\\): \`${p.not}\`\n\n` +
     `🕐 آخرین بروزرسانی: ${p.updatedAt}`
   );
 }
