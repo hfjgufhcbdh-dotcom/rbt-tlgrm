@@ -114,7 +114,7 @@ export async function fetchLivePrices(): Promise<PriceData> {
     const [rates, goldUsdPerOz, crypto] = await Promise.all([
       fetchExchangeRates(),
       fetchGoldUsd(),
-      fetchCryptoUsd().catch(() => ({ usdt: 1, ton: 0, hmstr: 0, dogs: 0 })),
+      fetchCryptoUsd().catch(() => ({ usdt: 1, ton: 0, hmstr: 0, dogs: 0, star: 0, not: 0, btc: 0, eth: 0 })),
     ]);
 
     const gold24PerGram = (goldUsdPerOz / TROY_OZ_GRAMS) * rates.usdToToman;

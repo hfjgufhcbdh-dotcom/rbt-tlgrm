@@ -1,5 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { fetchLivePrices } from "./prices";
+import { generateChartBuffer, type ChartAsset, type ChartPeriod } from "./chart";
 import { logger } from "./logger";
 import { db } from "@workspace/db";
 import { alertsTable, usersTable } from "@workspace/db/schema";
@@ -38,9 +39,36 @@ const mainKeyboard = {
     [{ text: "💵 قیمت ارز", callback_data: "currency" }],
     [{ text: "💎 ارز دیجیتال", callback_data: "crypto" }],
     [{ text: "📊 همه قیمت‌ها", callback_data: "all" }],
+    [{ text: "📈 نمودار قیمت", callback_data: "chart_menu" }],
     [{ text: "🔔 هشدار قیمت", callback_data: "alerts_menu" }],
   ],
 };
+
+const chartMenuKeyboard = {
+  inline_keyboard: [
+    [
+      { text: "₿ بیت‌کوین", callback_data: "chart_btc" },
+      { text: "🔷 اتریوم", callback_data: "chart_eth" },
+    ],
+    [
+      { text: "💎 تون", callback_data: "chart_ton" },
+      { text: "🥇 طلا", callback_data: "chart_gold" },
+    ],
+    [{ text: "🏠 بازگشت به منو", callback_data: "menu" }],
+  ],
+};
+
+function chartPeriodKeyboard(asset: string) {
+  return {
+    inline_keyboard: [
+      [
+        { text: "📅 ۷ روز", callback_data: `chartshow_${asset}_7` },
+        { text: "📅 ۳۰ روز", callback_data: `chartshow_${asset}_30` },
+      ],
+      [{ text: "⬅️ بازگشت", callback_data: "chart_menu" }],
+    ],
+  };
+}
 
 function makeBackKeyboard(section: string) {
   return {
@@ -321,6 +349,88 @@ bot.on("callback_query", async (query) => {
         message_id: msgId,
         parse_mode: "Markdown",
         reply_markup: makeBackKeyboard(section),
+      });
+      return;
+    }
+
+    // ── Chart menu ──
+    if (data === "chart_menu") {
+      await bot.editMessageText(
+        `📈 *نمودار قیمت*\n\nکدام دارایی را می‌خواهید نمودار آن را ببینید؟`,
+        {
+          chat_id: chatId,
+          message_id: msgId,
+          parse_mode: "Markdown",
+          reply_markup: chartMenuKeyboard,
+        }
+      );
+      return;
+    }
+
+    // ── Chart asset selected → choose period ──
+    if (data.startsWith("chart_") && !data.startsWith("chartshow_")) {
+      const asset = data.replace("chart_", "");
+      const assetNames: Record<string, string> = {
+        btc: "بیت‌کوین",
+        eth: "اتریوم",
+        ton: "تون",
+        gold: "طلا",
+      };
+      await bot.editMessageText(
+        `📈 *نمودار ${assetNames[asset] ?? asset}*\n\nبازه زمانی را انتخاب کنید:`,
+        {
+          chat_id: chatId,
+          message_id: msgId,
+          parse_mode: "Markdown",
+          reply_markup: chartPeriodKeyboard(asset),
+        }
+      );
+      return;
+    }
+
+    // ── Chart show → generate & send image ──
+    if (data.startsWith("chartshow_")) {
+      const parts = data.split("_");
+      const asset = parts[1] as ChartAsset;
+      const period = parts[2] as ChartPeriod;
+
+      await bot.editMessageText(`⏳ در حال دریافت داده‌ها و رسم نمودار...`, {
+        chat_id: chatId,
+        message_id: msgId,
+      });
+
+      try {
+        const { buffer, caption } = await generateChartBuffer(asset, period);
+        await bot.sendPhoto(chatId, buffer, {
+          caption,
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: "📅 ۷ روز", callback_data: `chartshow_${asset}_7` },
+                { text: "📅 ۳۰ روز", callback_data: `chartshow_${asset}_30` },
+              ],
+              [{ text: "⬅️ نمودار دیگر", callback_data: "chart_menu" }],
+              [{ text: "🏠 منو اصلی", callback_data: "menu_new" }],
+            ],
+          },
+        });
+        // Delete the "loading..." message
+        await bot.deleteMessage(chatId, msgId).catch(() => {});
+      } catch (chartErr) {
+        logger.error({ chartErr }, "Failed to generate chart");
+        await bot.sendMessage(chatId, "❌ خطا در دریافت داده‌های نمودار. لطفاً دوباره تلاش کنید.", {
+          reply_markup: mainKeyboard,
+        });
+      }
+      return;
+    }
+
+    // ── menu_new: send a fresh main menu message ──
+    if (data === "menu_new") {
+      await bot.sendMessage(chatId, WELCOME, {
+        parse_mode: "Markdown",
+        reply_markup: mainKeyboard,
       });
       return;
     }
