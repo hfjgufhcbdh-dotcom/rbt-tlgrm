@@ -3,17 +3,11 @@ import axios from "axios";
 export type ChartAsset = "btc" | "eth" | "ton" | "gold";
 export type ChartPeriod = "7" | "30";
 
-const COINGECKO_IDS: Record<string, string> = {
-  btc: "bitcoin",
-  eth: "ethereum",
-  ton: "the-open-network",
-};
-
 const ASSET_NAMES: Record<ChartAsset, string> = {
   btc: "بیت‌کوین (BTC)",
   eth: "اتریوم (ETH)",
   ton: "تون (TON)",
-  gold: "طلا (XAU/USD)",
+  gold: "طلا (XAU)",
 };
 
 const PERIOD_LABELS: Record<ChartPeriod, string> = {
@@ -21,10 +15,18 @@ const PERIOD_LABELS: Record<ChartPeriod, string> = {
   "30": "۳۰ روز گذشته",
 };
 
-async function fetchCryptoPrices(
-  coinId: string,
+const COINGECKO_IDS: Record<string, string> = {
+  btc: "bitcoin",
+  eth: "ethereum",
+  ton: "the-open-network",
+  gold: "pax-gold",
+};
+
+async function fetchHistoricalPrices(
+  asset: ChartAsset,
   days: ChartPeriod
 ): Promise<{ labels: string[]; prices: number[] }> {
+  const coinId = COINGECKO_IDS[asset];
   const url = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart`;
   const resp = await axios.get<{ prices: [number, number][] }>(url, {
     params: { vs_currency: "usd", days },
@@ -33,7 +35,6 @@ async function fetchCryptoPrices(
   });
 
   const raw = resp.data.prices;
-  // downsample to at most 30 data points
   const step = Math.max(1, Math.floor(raw.length / 30));
   const sampled = raw.filter((_, i) => i % step === 0);
 
@@ -45,38 +46,12 @@ async function fetchCryptoPrices(
   return { labels, prices };
 }
 
-async function fetchGoldPrices(
-  days: ChartPeriod
-): Promise<{ labels: string[]; prices: number[] }> {
-  // Use BTC as a proxy gold source is unavailable; fall back to a simple OHLC endpoint
-  // Gold historical via metals-api alternative: use Coinbase XAU-USD if available
-  // Fallback: use open.er-api.com — it only gives live rate, not history
-  // Best free option: CoinGecko doesn't support XAU. Use paxg (PAX Gold) as proxy.
-  const url = `https://api.coingecko.com/api/v3/coins/pax-gold/market_chart`;
-  const resp = await axios.get<{ prices: [number, number][] }>(url, {
-    params: { vs_currency: "usd", days },
-    timeout: 10_000,
-    headers: { Accept: "application/json" },
-  });
-
-  const raw = resp.data.prices;
-  const step = Math.max(1, Math.floor(raw.length / 30));
-  const sampled = raw.filter((_, i) => i % step === 0);
-
-  const labels = sampled.map(([ts]) => {
-    const d = new Date(ts);
-    return `${d.getMonth() + 1}/${d.getDate()}`;
-  });
-  const prices = sampled.map(([, p]) => Math.round(p * 100) / 100);
-  return { labels, prices };
-}
-
-function buildQuickChartUrl(
-  labels: string[],
-  prices: number[],
+export async function generateChartBuffer(
   asset: ChartAsset,
   period: ChartPeriod
-): string {
+): Promise<{ buffer: Buffer; caption: string }> {
+  const { labels, prices } = await fetchHistoricalPrices(asset, period);
+
   const isUp = prices[prices.length - 1]! >= prices[0]!;
   const color = isUp ? "rgb(34,197,94)" : "rgb(239,68,68)";
   const fillColor = isUp ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)";
@@ -122,25 +97,9 @@ function buildQuickChartUrl(
   };
 
   const encoded = encodeURIComponent(JSON.stringify(chartConfig));
-  return `https://quickchart.io/chart?c=${encoded}&width=700&height=380&backgroundColor=white`;
-}
+  const chartUrl = `https://quickchart.io/chart?c=${encoded}&width=700&height=380&backgroundColor=white`;
 
-export async function generateChartBuffer(
-  asset: ChartAsset,
-  period: ChartPeriod
-): Promise<{ buffer: Buffer; caption: string }> {
-  let labels: string[];
-  let prices: number[];
-
-  if (asset === "gold") {
-    ({ labels, prices } = await fetchGoldPrices(period));
-  } else {
-    const coinId = COINGECKO_IDS[asset]!;
-    ({ labels, prices } = await fetchCryptoPrices(coinId, period));
-  }
-
-  const url = buildQuickChartUrl(labels, prices, asset, period);
-  const imgResp = await axios.get<Buffer>(url, {
+  const imgResp = await axios.get<Buffer>(chartUrl, {
     responseType: "arraybuffer",
     timeout: 15_000,
   });
@@ -148,7 +107,7 @@ export async function generateChartBuffer(
   const first = prices[0] ?? 0;
   const last = prices[prices.length - 1] ?? 0;
   const changePct = first > 0 ? (((last - first) / first) * 100).toFixed(2) : "0";
-  const arrow = last >= first ? "📈" : "📉";
+  const arrow = isUp ? "📈" : "📉";
 
   const caption =
     `${arrow} *${ASSET_NAMES[asset]}*\n` +
