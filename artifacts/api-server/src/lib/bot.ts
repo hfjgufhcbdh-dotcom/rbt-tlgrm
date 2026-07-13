@@ -63,7 +63,11 @@ function chartPeriodKeyboard(asset: string) {
     inline_keyboard: [
       [
         { text: "📅 ۷ روز", callback_data: `chartshow_${asset}_7` },
-        { text: "📅 ۳۰ روز", callback_data: `chartshow_${asset}_30` },
+        { text: "📅 ۱ ماه", callback_data: `chartshow_${asset}_30` },
+      ],
+      [
+        { text: "📅 ۱ سال", callback_data: `chartshow_${asset}_365` },
+        { text: "📅 ۳ سال", callback_data: `chartshow_${asset}_1095` },
       ],
       [{ text: "⬅️ بازگشت", callback_data: "chart_menu" }],
     ],
@@ -408,7 +412,11 @@ bot.on("callback_query", async (query) => {
             inline_keyboard: [
               [
                 { text: "📅 ۷ روز", callback_data: `chartshow_${asset}_7` },
-                { text: "📅 ۳۰ روز", callback_data: `chartshow_${asset}_30` },
+                { text: "📅 ۱ ماه", callback_data: `chartshow_${asset}_30` },
+              ],
+              [
+                { text: "📅 ۱ سال", callback_data: `chartshow_${asset}_365` },
+                { text: "📅 ۳ سال", callback_data: `chartshow_${asset}_1095` },
               ],
               [{ text: "⬅️ نمودار دیگر", callback_data: "chart_menu" }],
               [{ text: "🏠 منو اصلی", callback_data: "menu_new" }],

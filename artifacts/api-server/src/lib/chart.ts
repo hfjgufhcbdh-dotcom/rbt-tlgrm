@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export type ChartAsset = "btc" | "eth" | "ton" | "gold";
-export type ChartPeriod = "7" | "30";
+export type ChartPeriod = "7" | "30" | "365" | "1095";
 
 const ASSET_NAMES: Record<ChartAsset, string> = {
   btc: "بیت‌کوین (BTC)",
@@ -12,8 +12,12 @@ const ASSET_NAMES: Record<ChartAsset, string> = {
 
 const PERIOD_LABELS: Record<ChartPeriod, string> = {
   "7": "۷ روز گذشته",
-  "30": "۳۰ روز گذشته",
+  "30": "۱ ماه گذشته",
+  "365": "۱ سال گذشته",
+  "1095": "۳ سال گذشته",
 };
+
+const MAX_POINTS = 40;
 
 const COINGECKO_IDS: Record<string, string> = {
   btc: "bitcoin",
@@ -22,26 +26,36 @@ const COINGECKO_IDS: Record<string, string> = {
   gold: "pax-gold",
 };
 
+function formatLabel(ts: number, period: ChartPeriod): string {
+  const d = new Date(ts);
+  if (period === "7" || period === "30") {
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  if (period === "365") {
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return months[d.getMonth()]!;
+  }
+  // 1095 — year/month
+  return `${d.getFullYear()}/${d.getMonth() + 1}`;
+}
+
 async function fetchHistoricalPrices(
   asset: ChartAsset,
-  days: ChartPeriod
+  period: ChartPeriod
 ): Promise<{ labels: string[]; prices: number[] }> {
   const coinId = COINGECKO_IDS[asset];
   const url = `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart`;
   const resp = await axios.get<{ prices: [number, number][] }>(url, {
-    params: { vs_currency: "usd", days },
-    timeout: 10_000,
+    params: { vs_currency: "usd", days: period },
+    timeout: 15_000,
     headers: { Accept: "application/json" },
   });
 
   const raw = resp.data.prices;
-  const step = Math.max(1, Math.floor(raw.length / 30));
+  const step = Math.max(1, Math.floor(raw.length / MAX_POINTS));
   const sampled = raw.filter((_, i) => i % step === 0);
 
-  const labels = sampled.map(([ts]) => {
-    const d = new Date(ts);
-    return `${d.getMonth() + 1}/${d.getDate()}`;
-  });
+  const labels = sampled.map(([ts]) => formatLabel(ts, period));
   const prices = sampled.map(([, p]) => Math.round(p * 100) / 100);
   return { labels, prices };
 }
