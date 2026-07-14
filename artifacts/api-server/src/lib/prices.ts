@@ -9,6 +9,11 @@ export interface PriceData {
   baharCoin: string;
   halfCoin: string;
   quarterCoin: string;
+  parsian100: string;
+  parsian250: string;
+  parsian500: string;
+  parsian1g: string;
+  parsian2g: string;
   usd: string;
   eur: string;
   gbp: string;
@@ -153,6 +158,11 @@ export async function fetchLivePrices(): Promise<PriceData> {
       baharCoin:   coinPrice(gold24PerGram, COIN_SPECS.bahar),
       halfCoin:    coinPrice(gold24PerGram, COIN_SPECS.half),
       quarterCoin: coinPrice(gold24PerGram, COIN_SPECS.quarter),
+      parsian100:  toman(gold18PerGram * 0.100),
+      parsian250:  toman(gold18PerGram * 0.250),
+      parsian500:  toman(gold18PerGram * 0.500),
+      parsian1g:   toman(gold18PerGram * 1.000),
+      parsian2g:   toman(gold18PerGram * 2.000),
       usd:  toman(rates.usdToToman),
       eur:  toman(rates.eurToToman),
       gbp:  toman(rates.gbpToToman),
@@ -192,6 +202,7 @@ export async function fetchLivePrices(): Promise<PriceData> {
     return {
       gold18: na, gold24: na, mithqal: na,
       emamiCoin: na, baharCoin: na, halfCoin: na, quarterCoin: na,
+      parsian100: na, parsian250: na, parsian500: na, parsian1g: na, parsian2g: na,
       usd: na, eur: na, gbp: na, aed: na, afn: na,
       iqd: na, tryL: na, pkr: na, rub: na, sar: na, cny: na, jpy: na, inr: na,
       usdt: na,

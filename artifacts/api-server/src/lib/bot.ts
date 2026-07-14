@@ -35,7 +35,10 @@ const ASSET_LABEL: Record<string, string> = Object.fromEntries(
 const mainKeyboard = {
   inline_keyboard: [
     [{ text: "🥇 قیمت طلا", callback_data: "gold" }],
-    [{ text: "🪙 قیمت سکه", callback_data: "coin" }],
+    [
+      { text: "🪙 قیمت سکه", callback_data: "coin" },
+      { text: "🏦 سکه پارسیان", callback_data: "parsian_coin" },
+    ],
     [{ text: "💵 قیمت ارز", callback_data: "currency" }],
     [{ text: "💎 ارز دیجیتال", callback_data: "crypto" }],
     [{ text: "📊 همه قیمت‌ها", callback_data: "all" }],
@@ -110,6 +113,20 @@ async function getCoinText() {
     `🪙 بهار آزادی: \`${p.baharCoin}\`\n` +
     `🔸 نیم سکه: \`${p.halfCoin}\`\n` +
     `🔹 ربع سکه: \`${p.quarterCoin}\`\n\n` +
+    `🕐 آخرین بروزرسانی: ${p.updatedAt}`
+  );
+}
+
+async function getCoinParsianText() {
+  const p = await fetchLivePrices();
+  return (
+    `🏦 *سکه پارسیان*\n\n` +
+    `قیمت‌ها بر اساس طلای ۱۸ عیار محاسبه شده‌اند\n\n` +
+    `🔹 ۱۰۰ سوت (0.1 گرم): \`${p.parsian100}\`\n` +
+    `🔸 ۲۵۰ سوت (0.25 گرم): \`${p.parsian250}\`\n` +
+    `🔶 ۵۰۰ سوت (0.5 گرم): \`${p.parsian500}\`\n` +
+    `🥇 ۱ گرم: \`${p.parsian1g}\`\n` +
+    `🏆 ۲ گرم: \`${p.parsian2g}\`\n\n` +
     `🕐 آخرین بروزرسانی: ${p.updatedAt}`
   );
 }
@@ -348,10 +365,11 @@ bot.on("callback_query", async (query) => {
 
     // ── Price sections ──
     const section = data.startsWith("refresh_") ? data.replace("refresh_", "") : data;
-    if (["gold", "coin", "currency", "crypto", "all"].includes(section)) {
+    if (["gold", "coin", "currency", "crypto", "all", "parsian_coin"].includes(section)) {
       let text = "";
       if (section === "gold") text = await getGoldText();
       else if (section === "coin") text = await getCoinText();
+      else if (section === "parsian_coin") text = await getCoinParsianText();
       else if (section === "currency") text = await getCurrencyText();
       else if (section === "crypto") text = await getCryptoText();
       else text = await getAllText();
