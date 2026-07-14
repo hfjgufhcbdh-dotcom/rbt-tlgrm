@@ -134,6 +134,23 @@ async function fetchCryptoUsd(): Promise<CryptoRates> {
   };
 }
 
+// --- raw numeric data for internal use (charts, collectors) ---
+
+export interface RawPrices {
+  goldUsdPerOz: number;
+  gold24PerGramToman: number;
+  usdToToman: number;
+  btcUsd: number;
+  ethUsd: number;
+  tonUsd: number;
+}
+
+let cachedRaw: RawPrices | null = null;
+
+export async function fetchRawPrices(): Promise<RawPrices | null> {
+  return cachedRaw;
+}
+
 // --- main export ---
 
 let cachedData: PriceData | null = null;
@@ -188,6 +205,14 @@ export async function fetchLivePrices(): Promise<PriceData> {
     };
 
     cachedData = result;
+    cachedRaw = {
+      goldUsdPerOz,
+      gold24PerGramToman: gold24PerGram,
+      usdToToman: rates.usdToToman,
+      btcUsd: crypto.btc,
+      ethUsd: crypto.eth,
+      tonUsd: crypto.ton,
+    };
     logger.info({ goldUsd: goldUsdPerOz, usdToToman: rates.usdToToman, tonUsd: crypto.ton }, "Prices fetched");
     return result;
   } catch (err) {
