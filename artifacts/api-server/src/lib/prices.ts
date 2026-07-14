@@ -14,6 +14,14 @@ export interface PriceData {
   gbp: string;
   aed: string;
   afn: string;
+  iqd: string;
+  tryL: string;
+  pkr: string;
+  rub: string;
+  sar: string;
+  cny: string;
+  jpy: string;
+  inr: string;
   usdt: string;
   ton: string;
   hmstr: string;
@@ -57,6 +65,14 @@ interface Rates {
   gbpToToman: number;
   aedToToman: number;
   afnToToman: number;
+  iqdToToman: number;
+  tryToToman: number;
+  pkrToToman: number;
+  rubToToman: number;
+  sarToToman: number;
+  cnyToToman: number;
+  jpyToToman: number;
+  inrToToman: number;
 }
 
 async function fetchExchangeRates(): Promise<Rates> {
@@ -69,6 +85,14 @@ async function fetchExchangeRates(): Promise<Rates> {
     gbpToToman: usdToToman / r.GBP,
     aedToToman: usdToToman / r.AED,
     afnToToman: usdToToman / r.AFN,
+    iqdToToman: usdToToman / r.IQD,
+    tryToToman: usdToToman / r.TRY,
+    pkrToToman: usdToToman / r.PKR,
+    rubToToman: usdToToman / r.RUB,
+    sarToToman: usdToToman / r.SAR,
+    cnyToToman: usdToToman / r.CNY,
+    jpyToToman: usdToToman / r.JPY,
+    inrToToman: usdToToman / r.INR,
   };
 }
 
@@ -134,6 +158,14 @@ export async function fetchLivePrices(): Promise<PriceData> {
       gbp:  toman(rates.gbpToToman),
       aed:  toman(rates.aedToToman),
       afn:  toman(rates.afnToToman),
+      iqd:  toman(rates.iqdToToman),
+      tryL: toman(rates.tryToToman),
+      pkr:  toman(rates.pkrToToman),
+      rub:  toman(rates.rubToToman),
+      sar:  toman(rates.sarToToman),
+      cny:  toman(rates.cnyToToman),
+      jpy:  toman(rates.jpyToToman),
+      inr:  toman(rates.inrToToman),
       usdt: toman(crypto.usdt * rates.usdToToman),
       ton:  `${usd(crypto.ton)} | ${toman(crypto.ton * rates.usdToToman)}`,
       hmstr:`${usd(crypto.hmstr)} | ${toman(crypto.hmstr * rates.usdToToman)}`,
@@ -160,7 +192,9 @@ export async function fetchLivePrices(): Promise<PriceData> {
     return {
       gold18: na, gold24: na, mithqal: na,
       emamiCoin: na, baharCoin: na, halfCoin: na, quarterCoin: na,
-      usd: na, eur: na, gbp: na, aed: na, afn: na, usdt: na,
+      usd: na, eur: na, gbp: na, aed: na, afn: na,
+      iqd: na, tryL: na, pkr: na, rub: na, sar: na, cny: na, jpy: na, inr: na,
+      usdt: na,
       ton: na, hmstr: na, dogs: na, star: na, not: na, btc: na, eth: na,
       updatedAt: new Date().toLocaleTimeString("fa-IR"),
     };
