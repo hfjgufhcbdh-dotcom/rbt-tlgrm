@@ -2,6 +2,8 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { bot } from "./lib/bot";
 import { startAlertChecker } from "./lib/alertChecker";
+import { startCleanupJob } from "./lib/cleanupJob";
+import { startPriceHistoryCollector } from "./lib/priceHistoryCollector";
 import http from "http";
 
 const rawPort = process.env["PORT"];
@@ -26,6 +28,8 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   startAlertChecker(bot);
+  startCleanupJob();
+  startPriceHistoryCollector();
 
   // Keep-alive: ping the healthz endpoint every 4 minutes so
   // Replit's proxy doesn't mark the container as idle and sleep it.
