@@ -156,6 +156,8 @@ function formatLabel(dateStr: string, period: ChartPeriod): string {
 
 // ── CoinGecko ─────────────────────────────────────────────────────────────
 
+const CG_HEADERS = { "User-Agent": "Mozilla/5.0 (compatible; PriceBot/1.0)" };
+
 async function fetchCoinGeckoSeries(
   coinId: string,
   period: ChartPeriod,
@@ -163,7 +165,7 @@ async function fetchCoinGeckoSeries(
   const { cgDays } = PERIOD_CONFIG[period];
   const { data } = await axios.get<{ prices: [number, number][] }>(
     `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart`,
-    { params: { vs_currency: "usd", days: cgDays }, timeout: 15_000 },
+    { params: { vs_currency: "usd", days: cgDays }, timeout: 15_000, headers: CG_HEADERS },
   );
   const raw = data.prices;
   const step = Math.max(1, Math.floor(raw.length / MAX_POINTS));
@@ -179,7 +181,7 @@ async function fetchGoldUsdByDate(period: ChartPeriod): Promise<Map<string, numb
   const { cgDays } = PERIOD_CONFIG[period];
   const { data } = await axios.get<{ prices: [number, number][] }>(
     `https://api.coingecko.com/api/v3/coins/pax-gold/market_chart`,
-    { params: { vs_currency: "usd", days: cgDays }, timeout: 15_000 },
+    { params: { vs_currency: "usd", days: cgDays }, timeout: 15_000, headers: CG_HEADERS },
   );
   const map = new Map<string, number>();
   for (const [ts, price] of data.prices) map.set(toDateStr(new Date(ts)), price);

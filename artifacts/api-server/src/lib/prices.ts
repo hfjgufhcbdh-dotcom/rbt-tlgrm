@@ -117,10 +117,12 @@ interface CryptoRates {
   eth: number;
 }
 
+const CG_HEADERS = { "User-Agent": "Mozilla/5.0 (compatible; PriceBot/1.0)" };
+
 async function fetchCryptoUsd(): Promise<CryptoRates> {
   const { data } = await axios.get(
     "https://api.coingecko.com/api/v3/simple/price?ids=tether,the-open-network,hamster-kombat,dogs,star,notcoin,bitcoin,ethereum&vs_currencies=usd",
-    { timeout: 8000 }
+    { timeout: 8000, headers: CG_HEADERS }
   );
   return {
     usdt:  data["tether"]?.usd ?? 1,
