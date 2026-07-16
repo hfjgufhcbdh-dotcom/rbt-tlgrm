@@ -1,6 +1,13 @@
 import TelegramBot from "node-telegram-bot-api";
 import { fetchLivePrices } from "./prices";
-import { generateChartBuffer, type ChartAsset, type ChartPeriod } from "./chart";
+import {
+  generateChartBuffer,
+  CHART_CATEGORIES,
+  CHART_ASSETS,
+  PERIOD_LABELS,
+  type ChartCategory,
+  type ChartPeriod,
+} from "./chart";
 import { logger } from "./logger";
 import { db } from "@workspace/db";
 import { alertsTable, usersTable } from "@workspace/db/schema";
@@ -47,32 +54,96 @@ const mainKeyboard = {
   ],
 };
 
-const chartMenuKeyboard = {
+// ── Step 1: category selection ──
+const chartCategoryKeyboard = {
   inline_keyboard: [
     [
-      { text: "₿ بیت‌کوین", callback_data: "chart_btc" },
-      { text: "🔷 اتریوم", callback_data: "chart_eth" },
+      { text: "🥇 طلا",          callback_data: "chartcat_gold"       },
+      { text: "🪙 سکه",          callback_data: "chartcat_coin"       },
     ],
     [
-      { text: "💎 تون", callback_data: "chart_ton" },
-      { text: "🥇 طلا", callback_data: "chart_gold" },
+      { text: "💵 ارز",          callback_data: "chartcat_currency"   },
+      { text: "💎 ارز دیجیتال", callback_data: "chartcat_crypto"     },
+    ],
+    [
+      { text: "🏦 سکه پارسیان", callback_data: "chartcat_parsian"    },
+      { text: "🌍 طلای جهانی",  callback_data: "chartcat_globalgold" },
+    ],
+    [
+      { text: "🔥 طلای آب‌شده", callback_data: "chartcat_meltedgold" },
     ],
     [{ text: "🏠 بازگشت به منو", callback_data: "menu" }],
   ],
 };
 
-function chartPeriodKeyboard(asset: string) {
+// ── Step 2: asset selection per category ──
+function chartAssetKeyboard(category: ChartCategory) {
+  const assets = CHART_ASSETS[category];
+  const rows: { text: string; callback_data: string }[][] = [];
+  for (let i = 0; i < assets.length; i += 2) {
+    const row = [
+      {
+        text: `${assets[i]!.emoji} ${assets[i]!.label}`,
+        callback_data: `chartasset_${category}_${assets[i]!.key}`,
+      },
+    ];
+    if (assets[i + 1]) {
+      row.push({
+        text: `${assets[i + 1]!.emoji} ${assets[i + 1]!.label}`,
+        callback_data: `chartasset_${category}_${assets[i + 1]!.key}`,
+      });
+    }
+    rows.push(row);
+  }
+  rows.push([{ text: "⬅️ بازگشت", callback_data: "chart_menu" }]);
+  return { inline_keyboard: rows };
+}
+
+// ── Step 3: period selection ──
+function chartPeriodKeyboard(category: ChartCategory, assetKey: string) {
+  const base = `chartshow_${category}_${assetKey}`;
   return {
     inline_keyboard: [
       [
-        { text: "📅 ۷ روز", callback_data: `chartshow_${asset}_7` },
-        { text: "📅 ۱ ماه", callback_data: `chartshow_${asset}_30` },
+        { text: "📅 ۷ روز",  callback_data: `${base}_7`    },
+        { text: "📅 ۳۰ روز", callback_data: `${base}_30`   },
       ],
       [
-        { text: "📅 ۱ سال", callback_data: `chartshow_${asset}_365` },
-        { text: "📅 ۳ سال", callback_data: `chartshow_${asset}_1095` },
+        { text: "📅 ۳ ماه",  callback_data: `${base}_90`   },
+        { text: "📅 ۶ ماه",  callback_data: `${base}_180`  },
       ],
-      [{ text: "⬅️ بازگشت", callback_data: "chart_menu" }],
+      [
+        { text: "📅 ۱ سال",  callback_data: `${base}_365`  },
+        { text: "📅 ۳ سال",  callback_data: `${base}_1095` },
+      ],
+      [
+        { text: "📅 حداکثر", callback_data: `${base}_max`  },
+      ],
+      [{ text: "⬅️ بازگشت", callback_data: `chartcat_${category}` }],
+    ],
+  };
+}
+
+// ── After-chart keyboard (change period / go back) ──
+function chartAfterKeyboard(category: ChartCategory, assetKey: string) {
+  const base = `chartshow_${category}_${assetKey}`;
+  return {
+    inline_keyboard: [
+      [
+        { text: "📅 ۷ روز",  callback_data: `${base}_7`    },
+        { text: "📅 ۳۰ روز", callback_data: `${base}_30`   },
+        { text: "📅 ۳ ماه",  callback_data: `${base}_90`   },
+      ],
+      [
+        { text: "📅 ۶ ماه",  callback_data: `${base}_180`  },
+        { text: "📅 ۱ سال",  callback_data: `${base}_365`  },
+        { text: "📅 ۳ سال",  callback_data: `${base}_1095` },
+      ],
+      [
+        { text: "📅 حداکثر",           callback_data: `${base}_max`       },
+        { text: "⬅️ دارایی دیگر",      callback_data: `chartcat_${category}` },
+      ],
+      [{ text: "🏠 منو اصلی", callback_data: "menu_new" }],
     ],
   };
 }
@@ -383,79 +454,92 @@ bot.on("callback_query", async (query) => {
       return;
     }
 
-    // ── Chart menu ──
+    // ── Step 1: Chart category menu ──
     if (data === "chart_menu") {
       await bot.editMessageText(
-        `📈 *نمودار قیمت*\n\nکدام دارایی را می‌خواهید نمودار آن را ببینید؟`,
+        `📈 *نمودار قیمت*\n\nدسته‌بندی مورد نظر را انتخاب کنید:`,
         {
           chat_id: chatId,
           message_id: msgId,
           parse_mode: "Markdown",
-          reply_markup: chartMenuKeyboard,
+          reply_markup: chartCategoryKeyboard,
         }
       );
       return;
     }
 
-    // ── Chart asset selected → choose period ──
-    if (data.startsWith("chart_") && !data.startsWith("chartshow_")) {
-      const asset = data.replace("chart_", "");
-      const assetNames: Record<string, string> = {
-        btc: "بیت‌کوین",
-        eth: "اتریوم",
-        ton: "تون",
-        gold: "طلا",
-      };
+    // ── Step 2: Asset selection within category ──
+    if (data.startsWith("chartcat_")) {
+      const category = data.slice("chartcat_".length) as ChartCategory;
+      const cat = CHART_CATEGORIES[category];
+      if (!cat) return;
       await bot.editMessageText(
-        `📈 *نمودار ${assetNames[asset] ?? asset}*\n\nبازه زمانی را انتخاب کنید:`,
+        `📈 *نمودار › ${cat.emoji} ${cat.label}*\n\nکدام دارایی؟`,
         {
           chat_id: chatId,
           message_id: msgId,
           parse_mode: "Markdown",
-          reply_markup: chartPeriodKeyboard(asset),
+          reply_markup: chartAssetKeyboard(category),
         }
       );
       return;
     }
 
-    // ── Chart show → generate & send image ──
-    if (data.startsWith("chartshow_")) {
-      const parts = data.split("_");
-      const asset = parts[1] as ChartAsset;
-      const period = parts[2] as ChartPeriod;
+    // ── Step 3: Period selection ──
+    if (data.startsWith("chartasset_")) {
+      const rest = data.slice("chartasset_".length);   // e.g. "gold_gold18"
+      const sepIdx = rest.indexOf("_");
+      if (sepIdx === -1) return;
+      const category = rest.slice(0, sepIdx) as ChartCategory;
+      const assetKey = rest.slice(sepIdx + 1);
+      const cat = CHART_CATEGORIES[category];
+      const assetDef = CHART_ASSETS[category]?.find(a => a.key === assetKey);
+      if (!cat || !assetDef) return;
+      await bot.editMessageText(
+        `📈 *نمودار › ${cat.emoji} ${cat.label} › ${assetDef.emoji} ${assetDef.label}*\n\nبازه زمانی را انتخاب کنید:`,
+        {
+          chat_id: chatId,
+          message_id: msgId,
+          parse_mode: "Markdown",
+          reply_markup: chartPeriodKeyboard(category, assetKey),
+        }
+      );
+      return;
+    }
 
-      await bot.editMessageText(`⏳ در حال دریافت داده‌ها و رسم نمودار...`, {
+    // ── Step 4: Generate & send chart ──
+    if (data.startsWith("chartshow_")) {
+      const parts = data.split("_"); // ["chartshow", category, assetKey, period]
+      if (parts.length < 4) return;  // ignore legacy 3-part callbacks
+      const category = parts[1] as ChartCategory;
+      const period   = parts[parts.length - 1] as ChartPeriod;
+      const assetKey = parts.slice(2, parts.length - 1).join("_");
+
+      if (!CHART_CATEGORIES[category] || !PERIOD_LABELS[period]) return;
+
+      await bot.editMessageText(`⏳ در حال دریافت داده‌ها و رسم نمودار…`, {
         chat_id: chatId,
         message_id: msgId,
       });
 
       try {
-        const { buffer, caption } = await generateChartBuffer(asset, period);
+        const { buffer, caption } = await generateChartBuffer(category, assetKey, period);
         await bot.sendPhoto(chatId, buffer, {
           caption,
           parse_mode: "Markdown",
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: "📅 ۷ روز", callback_data: `chartshow_${asset}_7` },
-                { text: "📅 ۱ ماه", callback_data: `chartshow_${asset}_30` },
-              ],
-              [
-                { text: "📅 ۱ سال", callback_data: `chartshow_${asset}_365` },
-                { text: "📅 ۳ سال", callback_data: `chartshow_${asset}_1095` },
-              ],
-              [{ text: "⬅️ نمودار دیگر", callback_data: "chart_menu" }],
-              [{ text: "🏠 منو اصلی", callback_data: "menu_new" }],
-            ],
-          },
+          reply_markup: chartAfterKeyboard(category, assetKey),
         });
-        // Delete the "loading..." message
         await bot.deleteMessage(chatId, msgId).catch(() => {});
       } catch (chartErr) {
-        logger.error({ chartErr }, "Failed to generate chart");
-        await bot.sendMessage(chatId, "❌ خطا در دریافت داده‌های نمودار. لطفاً دوباره تلاش کنید.", {
-          reply_markup: mainKeyboard,
-        });
+        logger.error({ chartErr }, "Chart generation failed");
+        await bot.editMessageText(
+          "❌ خطا در دریافت داده‌های نمودار. لطفاً دوباره تلاش کنید.",
+          {
+            chat_id: chatId,
+            message_id: msgId,
+            reply_markup: chartCategoryKeyboard,
+          }
+        );
       }
       return;
     }
