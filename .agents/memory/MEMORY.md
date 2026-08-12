@@ -1,0 +1,1 @@
+- [Workspace package installs](pnpm-package-targeting.md) — dependency installs must target the owning workspace package, not the monorepo root.
