@@ -23,7 +23,9 @@ import type {
   AddCryptoPriceRequest,
   AddCryptoPriceResponse,
   CryptoListResponse,
+  GlobalCryptoPricesResponse,
   HealthStatus,
+  IranianCryptoPricesResponse,
   PricesResponse
 } from './api.schemas';
 
@@ -183,6 +185,162 @@ export function useGetPrices<TData = Awaited<ReturnType<typeof getPrices>>, TErr
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetPricesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetGlobalCryptoPricesUrl = () => {
+
+
+
+
+  return `/api/global-prices`
+}
+
+/**
+ * Fetches live prices and 24-hour changes from CoinGecko.
+ * @summary Get global cryptocurrency prices in USD
+ */
+export const getGlobalCryptoPrices = async ( options?: RequestInit): Promise<GlobalCryptoPricesResponse> => {
+
+  return customFetch<GlobalCryptoPricesResponse>(getGetGlobalCryptoPricesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGlobalCryptoPricesQueryKey = () => {
+    return [
+    `/api/global-prices`
+    ] as const;
+    }
+
+
+export const getGetGlobalCryptoPricesQueryOptions = <TData = Awaited<ReturnType<typeof getGlobalCryptoPrices>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGlobalCryptoPrices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGlobalCryptoPricesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGlobalCryptoPrices>>> = ({ signal }) => getGlobalCryptoPrices({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGlobalCryptoPrices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGlobalCryptoPricesQueryResult = NonNullable<Awaited<ReturnType<typeof getGlobalCryptoPrices>>>
+export type GetGlobalCryptoPricesQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get global cryptocurrency prices in USD
+ */
+
+export function useGetGlobalCryptoPrices<TData = Awaited<ReturnType<typeof getGlobalCryptoPrices>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGlobalCryptoPrices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGlobalCryptoPricesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetIranianCryptoPricesUrl = () => {
+
+
+
+
+  return `/api/iranian-prices`
+}
+
+/**
+ * Fetches last trade prices from Nobitex in IRR and Toman.
+ * @summary Get Iranian cryptocurrency prices
+ */
+export const getIranianCryptoPrices = async ( options?: RequestInit): Promise<IranianCryptoPricesResponse> => {
+
+  return customFetch<IranianCryptoPricesResponse>(getGetIranianCryptoPricesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetIranianCryptoPricesQueryKey = () => {
+    return [
+    `/api/iranian-prices`
+    ] as const;
+    }
+
+
+export const getGetIranianCryptoPricesQueryOptions = <TData = Awaited<ReturnType<typeof getIranianCryptoPrices>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIranianCryptoPrices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetIranianCryptoPricesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getIranianCryptoPrices>>> = ({ signal }) => getIranianCryptoPrices({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getIranianCryptoPrices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetIranianCryptoPricesQueryResult = NonNullable<Awaited<ReturnType<typeof getIranianCryptoPrices>>>
+export type GetIranianCryptoPricesQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get Iranian cryptocurrency prices
+ */
+
+export function useGetIranianCryptoPrices<TData = Awaited<ReturnType<typeof getIranianCryptoPrices>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIranianCryptoPrices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetIranianCryptoPricesQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

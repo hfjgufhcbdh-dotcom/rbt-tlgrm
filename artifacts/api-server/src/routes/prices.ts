@@ -1,5 +1,9 @@
 import { Router, type Request, type Response } from "express";
-import { fetchLivePrices } from "../lib/prices";
+import {
+  fetchGlobalPrices,
+  fetchIranianPrices,
+  fetchLivePrices,
+} from "../lib/prices";
 
 const router = Router();
 
@@ -10,6 +14,52 @@ router.get("/prices", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to fetch prices");
     res.status(500).json({ error: "Failed to fetch prices" });
+  }
+});
+
+router.get("/global-prices", async (req, res) => {
+  try {
+    const data = await fetchGlobalPrices();
+    res.json({
+      success: true,
+      source: "CoinGecko",
+      currency: "USD",
+      data,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch global crypto prices");
+    res.status(502).json({
+      success: false,
+      source: "CoinGecko",
+      error: "خطا در دریافت قیمت‌های جهانی از CoinGecko",
+    });
+  }
+});
+
+router.get("/iranian-prices", async (req, res) => {
+  try {
+    const rialData = await fetchIranianPrices();
+    const tomanData = Object.fromEntries(
+      Object.entries(rialData).map(([symbol, price]) => [symbol, price / 10]),
+    );
+
+    res.json({
+      success: true,
+      source: "Nobitex",
+      rawCurrency: "IRR",
+      currency: "TOMAN",
+      data: {
+        rial: rialData,
+        toman: tomanData,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch Iranian crypto prices");
+    res.status(502).json({
+      success: false,
+      source: "Nobitex",
+      error: "خطا در دریافت قیمت‌های بازار ایران از نوبیتکس",
+    });
   }
 });
 

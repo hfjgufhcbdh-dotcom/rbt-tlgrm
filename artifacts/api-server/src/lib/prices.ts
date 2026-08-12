@@ -119,6 +119,25 @@ interface CryptoRates {
 
 const CG_HEADERS = { "User-Agent": "Mozilla/5.0 (compatible; PriceBot/1.0)" };
 
+export type GlobalCryptoPrice = {
+  usd: number;
+  usd_24h_change: number | null;
+};
+
+export type GlobalCryptoPrices = Record<string, GlobalCryptoPrice>;
+
+const GLOBAL_COIN_IDS = [
+  "bitcoin",
+  "ethereum",
+  "tether",
+  "tron",
+  "solana",
+  "binancecoin",
+  "ripple",
+  "the-open-network",
+  "dogecoin",
+] as const;
+
 async function fetchCryptoUsd(): Promise<CryptoRates> {
   const { data } = await axios.get(
     "https://api.coingecko.com/api/v3/simple/price?ids=tether,the-open-network,hamster-kombat,dogs,star,notcoin,bitcoin,ethereum&vs_currencies=usd",
@@ -134,6 +153,80 @@ async function fetchCryptoUsd(): Promise<CryptoRates> {
     btc:   data["bitcoin"]?.usd ?? 0,
     eth:   data["ethereum"]?.usd ?? 0,
   };
+}
+
+export async function fetchGlobalPrices(): Promise<GlobalCryptoPrices> {
+  const { data } = await axios.get<Record<string, { usd?: number; usd_24h_change?: number }>>(
+    "https://api.coingecko.com/api/v3/simple/price",
+    {
+      params: {
+        ids: GLOBAL_COIN_IDS.join(","),
+        vs_currencies: "usd",
+        include_24hr_change: "true",
+      },
+      timeout: 8000,
+      headers: CG_HEADERS,
+    },
+  );
+
+  return Object.fromEntries(
+    GLOBAL_COIN_IDS.map((coinId) => {
+      const value = data[coinId];
+      if (typeof value?.usd !== "number" || !Number.isFinite(value.usd)) {
+        throw new Error(`CoinGecko returned no USD price for ${coinId}`);
+      }
+
+      return [
+        coinId,
+        {
+          usd: value.usd,
+          usd_24h_change:
+            typeof value.usd_24h_change === "number" && Number.isFinite(value.usd_24h_change)
+              ? value.usd_24h_change
+              : null,
+        },
+      ];
+    }),
+  );
+}
+
+export type IranianCryptoPriceKey = "USDT" | "BTC" | "ETH" | "TRX" | "SOL" | "TON";
+export type IranianCryptoPrices = Record<IranianCryptoPriceKey, number>;
+
+type NobitexMarket = {
+  lastTradePrice?: string | number;
+};
+
+const IRANIAN_MARKETS: Record<IranianCryptoPriceKey, string> = {
+  USDT: "USDTIRT",
+  BTC: "BTCIRT",
+  ETH: "ETHIRT",
+  TRX: "TRXIRT",
+  SOL: "SOLIRT",
+  TON: "TONIRT",
+};
+
+export async function fetchIranianPrices(): Promise<IranianCryptoPrices> {
+  const { data } = await axios.get<Record<string, NobitexMarket>>(
+    "https://api.nobitex.ir/v2/orderbook/all",
+    {
+      timeout: 8000,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; PriceBot/1.0)" },
+    },
+  );
+
+  return Object.fromEntries(
+    Object.entries(IRANIAN_MARKETS).map(([symbol, market]) => {
+      const rawPrice = data[market]?.lastTradePrice;
+      const price = typeof rawPrice === "number" ? rawPrice : Number(rawPrice);
+
+      if (!Number.isFinite(price) || price < 0) {
+        throw new Error(`Nobitex returned no valid price for ${market}`);
+      }
+
+      return [symbol, price];
+    }),
+  ) as IranianCryptoPrices;
 }
 
 // --- raw numeric data for internal use (charts, collectors) ---

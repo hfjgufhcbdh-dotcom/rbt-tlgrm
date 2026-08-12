@@ -39,6 +39,51 @@ export const GetPricesResponse = zod.object({
 
 
 /**
+ * Fetches live prices and 24-hour changes from CoinGecko.
+ * @summary Get global cryptocurrency prices in USD
+ */
+export const GetGlobalCryptoPricesResponse = zod.object({
+  "success": zod.boolean(),
+  "source": zod.string(),
+  "currency": zod.string(),
+  "data": zod.record(zod.string(), zod.object({
+  "usd": zod.number(),
+  "usd_24h_change": zod.number().nullable()
+}))
+})
+
+
+/**
+ * Fetches last trade prices from Nobitex in IRR and Toman.
+ * @summary Get Iranian cryptocurrency prices
+ */
+export const GetIranianCryptoPricesResponse = zod.object({
+  "success": zod.boolean(),
+  "source": zod.string(),
+  "rawCurrency": zod.string(),
+  "currency": zod.string(),
+  "data": zod.object({
+  "rial": zod.object({
+  "USDT": zod.number(),
+  "BTC": zod.number(),
+  "ETH": zod.number(),
+  "TRX": zod.number(),
+  "SOL": zod.number(),
+  "TON": zod.number()
+}),
+  "toman": zod.object({
+  "USDT": zod.number(),
+  "BTC": zod.number(),
+  "ETH": zod.number(),
+  "TRX": zod.number(),
+  "SOL": zod.number(),
+  "TON": zod.number()
+})
+})
+})
+
+
+/**
  * @summary Get the live cryptocurrency list
  */
 export const GetCryptoListResponse = zod.object({

@@ -39,6 +39,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PricesResponse"
+  /global-prices:
+    get:
+      operationId: getGlobalCryptoPrices
+      tags: [prices]
+      summary: Get global cryptocurrency prices in USD
+      description: Fetches live prices and 24-hour changes from CoinGecko.
+      responses:
+        "200":
+          description: Global cryptocurrency prices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GlobalCryptoPricesResponse"
+        "502":
+          description: CoinGecko is unavailable
+  /iranian-prices:
+    get:
+      operationId: getIranianCryptoPrices
+      tags: [prices]
+      summary: Get Iranian cryptocurrency prices
+      description: Fetches last trade prices from Nobitex in IRR and Toman.
+      responses:
+        "200":
+          description: Iranian cryptocurrency prices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IranianCryptoPricesResponse"
+        "502":
+          description: Nobitex is unavailable
   /list:
     get:
       operationId: getCryptoList
@@ -126,6 +156,65 @@ components:
         - aed
         - usdt
         - updatedAt
+    GlobalCryptoPrice:
+      type: object
+      properties:
+        usd:
+          type: number
+        usd_24h_change:
+          type: number
+          nullable: true
+      required: [usd, usd_24h_change]
+    GlobalCryptoPricesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        source:
+          type: string
+        currency:
+          type: string
+        data:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/GlobalCryptoPrice"
+      required: [success, source, currency, data]
+    IranianCryptoPriceValues:
+      type: object
+      properties:
+        USDT:
+          type: number
+        BTC:
+          type: number
+        ETH:
+          type: number
+        TRX:
+          type: number
+        SOL:
+          type: number
+        TON:
+          type: number
+      required: [USDT, BTC, ETH, TRX, SOL, TON]
+    IranianCryptoPricesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        source:
+          type: string
+        rawCurrency:
+          type: string
+        currency:
+          type: string
+        data:
+          type: object
+          properties:
+            rial:
+              $ref: "#/components/schemas/IranianCryptoPriceValues"
+            toman:
+              $ref: "#/components/schemas/IranianCryptoPriceValues"
+          required: [rial, toman]
+      required: [success, source, rawCurrency, currency, data]
     CryptoListItem:
       type: object
       properties:

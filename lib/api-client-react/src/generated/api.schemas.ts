@@ -25,6 +25,42 @@ export interface PricesResponse {
   updatedAt: string;
 }
 
+export interface GlobalCryptoPrice {
+  usd: number;
+  usd_24h_change: number | null;
+}
+
+export type GlobalCryptoPricesResponseData = {[key: string]: GlobalCryptoPrice};
+
+export interface GlobalCryptoPricesResponse {
+  success: boolean;
+  source: string;
+  currency: string;
+  data: GlobalCryptoPricesResponseData;
+}
+
+export interface IranianCryptoPriceValues {
+  USDT: number;
+  BTC: number;
+  ETH: number;
+  TRX: number;
+  SOL: number;
+  TON: number;
+}
+
+export type IranianCryptoPricesResponseData = {
+  rial: IranianCryptoPriceValues;
+  toman: IranianCryptoPriceValues;
+};
+
+export interface IranianCryptoPricesResponse {
+  success: boolean;
+  source: string;
+  rawCurrency: string;
+  currency: string;
+  data: IranianCryptoPricesResponseData;
+}
+
 export interface CryptoListItem {
   id: number;
   name: string;
