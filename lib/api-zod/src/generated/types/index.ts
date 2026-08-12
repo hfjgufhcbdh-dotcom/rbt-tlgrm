@@ -6,5 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './addCryptoPriceRequest';
+export * from './addCryptoPriceResponse';
+export * from './addCryptoPriceResponseData';
+export * from './cryptoListItem';
+export * from './cryptoListResponse';
 export * from './healthStatus';
 export * from './pricesResponse';

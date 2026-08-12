@@ -25,3 +25,33 @@ export interface PricesResponse {
   updatedAt: string;
 }
 
+export interface CryptoListItem {
+  id: number;
+  name: string;
+  symbol: string;
+  price: string;
+}
+
+export interface CryptoListResponse {
+  success: boolean;
+  message: string;
+  data: CryptoListItem[];
+}
+
+export interface AddCryptoPriceRequest {
+  coinName: string;
+  price: number | string;
+}
+
+export type AddCryptoPriceResponseData = {
+  coinName: string;
+  price: number;
+  persisted: boolean;
+};
+
+export interface AddCryptoPriceResponse {
+  success: boolean;
+  message: string;
+  data: AddCryptoPriceResponseData;
+}
+

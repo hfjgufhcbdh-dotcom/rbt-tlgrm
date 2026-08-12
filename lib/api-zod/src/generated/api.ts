@@ -38,3 +38,28 @@ export const GetPricesResponse = zod.object({
 })
 
 
+/**
+ * @summary Get the live cryptocurrency list
+ */
+export const GetCryptoListResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string(),
+  "data": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "symbol": zod.string(),
+  "price": zod.string()
+}))
+})
+
+
+/**
+ * Accepts a price payload without persisting it.
+ * @summary Validate a cryptocurrency price submission
+ */
+export const AddCryptoPriceBody = zod.object({
+  "coinName": zod.string(),
+  "price": zod.union([zod.number(),zod.string()])
+})
+
+

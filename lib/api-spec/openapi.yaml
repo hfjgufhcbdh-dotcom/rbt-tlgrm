@@ -39,6 +39,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PricesResponse"
+  /list:
+    get:
+      operationId: getCryptoList
+      tags: [prices]
+      summary: Get the live cryptocurrency list
+      responses:
+        "200":
+          description: Live cryptocurrency prices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CryptoListResponse"
+        "500":
+          description: Failed to fetch cryptocurrency prices
+  /add:
+    post:
+      operationId: addCryptoPrice
+      tags: [prices]
+      summary: Validate a cryptocurrency price submission
+      description: Accepts a price payload without persisting it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCryptoPriceRequest"
+      responses:
+        "201":
+          description: Price payload accepted without persistence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddCryptoPriceResponse"
+        "400":
+          description: Invalid cryptocurrency name or price
 components:
   schemas:
     HealthStatus:
@@ -91,3 +126,55 @@ components:
         - aed
         - usdt
         - updatedAt
+    CryptoListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        symbol:
+          type: string
+        price:
+          type: string
+      required: [id, name, symbol, price]
+    CryptoListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CryptoListItem"
+      required: [success, message, data]
+    AddCryptoPriceRequest:
+      type: object
+      properties:
+        coinName:
+          type: string
+        price:
+          oneOf:
+            - type: number
+            - type: string
+      required: [coinName, price]
+    AddCryptoPriceResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            coinName:
+              type: string
+            price:
+              type: number
+            persisted:
+              type: boolean
+          required: [coinName, price, persisted]
+      required: [success, message, data]

@@ -6,22 +6,29 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
+  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
+  AddCryptoPriceRequest,
+  AddCryptoPriceResponse,
+  CryptoListResponse,
   HealthStatus,
   PricesResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
-import type { ErrorType } from '../custom-fetch';
+import type { ErrorType , BodyType } from '../custom-fetch';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -187,4 +194,153 @@ export function useGetPrices<TData = Awaited<ReturnType<typeof getPrices>>, TErr
 
 
 
+
+export const getGetCryptoListUrl = () => {
+
+
+
+
+  return `/api/list`
+}
+
+/**
+ * @summary Get the live cryptocurrency list
+ */
+export const getCryptoList = async ( options?: RequestInit): Promise<CryptoListResponse> => {
+
+  return customFetch<CryptoListResponse>(getGetCryptoListUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCryptoListQueryKey = () => {
+    return [
+    `/api/list`
+    ] as const;
+    }
+
+
+export const getGetCryptoListQueryOptions = <TData = Awaited<ReturnType<typeof getCryptoList>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCryptoList>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCryptoListQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCryptoList>>> = ({ signal }) => getCryptoList({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCryptoList>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCryptoListQueryResult = NonNullable<Awaited<ReturnType<typeof getCryptoList>>>
+export type GetCryptoListQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the live cryptocurrency list
+ */
+
+export function useGetCryptoList<TData = Awaited<ReturnType<typeof getCryptoList>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCryptoList>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCryptoListQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAddCryptoPriceUrl = () => {
+
+
+
+
+  return `/api/add`
+}
+
+/**
+ * Accepts a price payload without persisting it.
+ * @summary Validate a cryptocurrency price submission
+ */
+export const addCryptoPrice = async (addCryptoPriceRequest: AddCryptoPriceRequest, options?: RequestInit): Promise<AddCryptoPriceResponse> => {
+
+  return customFetch<AddCryptoPriceResponse>(getAddCryptoPriceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      addCryptoPriceRequest,)
+  }
+);}
+
+
+
+
+export const getAddCryptoPriceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCryptoPrice>>, TError,{data: BodyType<AddCryptoPriceRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addCryptoPrice>>, TError,{data: BodyType<AddCryptoPriceRequest>}, TContext> => {
+
+const mutationKey = ['addCryptoPrice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addCryptoPrice>>, {data: BodyType<AddCryptoPriceRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  addCryptoPrice(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddCryptoPriceMutationResult = NonNullable<Awaited<ReturnType<typeof addCryptoPrice>>>
+    export type AddCryptoPriceMutationBody = BodyType<AddCryptoPriceRequest>
+    export type AddCryptoPriceMutationError = ErrorType<void>
+
+    /**
+ * @summary Validate a cryptocurrency price submission
+ */
+export const useAddCryptoPrice = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCryptoPrice>>, TError,{data: BodyType<AddCryptoPriceRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addCryptoPrice>>,
+        TError,
+        {data: BodyType<AddCryptoPriceRequest>},
+        TContext
+      > => {
+      return useMutation(getAddCryptoPriceMutationOptions(options));
+    }
 
