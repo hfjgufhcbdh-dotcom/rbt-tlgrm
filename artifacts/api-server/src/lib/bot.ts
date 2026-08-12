@@ -1,5 +1,5 @@
 import TelegramBot from "node-telegram-bot-api";
-import { fetchLivePrices } from "./prices";
+import { fetchCoinGeckoUsd, fetchLivePrices } from "./prices";
 import {
   generateChartBuffer,
   CHART_CATEGORIES,
@@ -48,11 +48,86 @@ const mainKeyboard = {
     ],
     [{ text: "💵 قیمت ارز", callback_data: "currency" }],
     [{ text: "💎 ارز دیجیتال", callback_data: "crypto" }],
+    [{ text: "🔎 مشخصات و کانترکت ارزها", callback_data: "crypto_info_menu" }],
     [{ text: "📊 همه قیمت‌ها", callback_data: "all" }],
     [{ text: "📈 نمودار قیمت", callback_data: "chart_menu" }],
     [{ text: "🔔 هشدار قیمت", callback_data: "alerts_menu" }],
   ],
 };
+
+const CRYPTO_DATABASE = {
+  BTC: {
+    id: "bitcoin",
+    name: "بیت‌کوین (Bitcoin)",
+    symbol: "BTC",
+    network: "Bitcoin Native",
+    contract: null,
+  },
+  ETH: {
+    id: "ethereum",
+    name: "اتریوم (Ethereum)",
+    symbol: "ETH",
+    network: "Ethereum (ERC20)",
+    contract: null,
+  },
+  USDT: {
+    id: "tether",
+    name: "تتر (Tether)",
+    symbol: "USDT",
+    network: "TRON (TRC20)",
+    contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+  },
+  TON: {
+    id: "the-open-network",
+    name: "تون‌کوین (Toncoin)",
+    symbol: "TON",
+    network: "TON Native",
+    contract: null,
+  },
+  RBTC: {
+    id: "rocky-rabbit",
+    name: "راکی ربیت (Rocky Rabbit)",
+    symbol: "RBTC",
+    network: "TON",
+    contract: "EQA-X_3EjA3xR34eTInP0xVfS-B0q9u1gC1V05786_RBTC",
+  },
+  SOON: {
+    id: "ton-station",
+    name: "تون استیشن (Ton Station)",
+    symbol: "SOON",
+    network: "TON",
+    contract: "EQC3N_TON_STATION_CONTRACT_ADDRESS",
+  },
+} as const;
+
+type CryptoSymbol = keyof typeof CRYPTO_DATABASE;
+
+const cryptoInfoKeyboard = {
+  inline_keyboard: [
+    [
+      { text: "⚡️ بیت‌کوین (BTC)", callback_data: "crypto_info_BTC" },
+      { text: "🔹 اتریوم (ETH)", callback_data: "crypto_info_ETH" },
+    ],
+    [
+      { text: "💵 تتر (USDT)", callback_data: "crypto_info_USDT" },
+      { text: "💎 تون‌کوین (TON)", callback_data: "crypto_info_TON" },
+    ],
+    [
+      { text: "🐰 راکی ربیت (RBTC)", callback_data: "crypto_info_RBTC" },
+      { text: "🚉 تون استیشن (SOON)", callback_data: "crypto_info_SOON" },
+    ],
+    [{ text: "🏠 بازگشت به منو", callback_data: "menu" }],
+  ],
+};
+
+function cryptoDetailsKeyboard(symbol: CryptoSymbol) {
+  return {
+    inline_keyboard: [
+      [{ text: "🔄 به‌روزرسانی قیمت", callback_data: `crypto_info_${symbol}` }],
+      [{ text: "🔙 بازگشت به لیست", callback_data: "crypto_info_menu" }],
+    ],
+  };
+}
 
 // ── Step 1: category selection ──
 const chartCategoryKeyboard = {
@@ -238,6 +313,31 @@ async function getCryptoText() {
     `₮ تتر \\(USDT\\): \`${p.usdt}\`\n\n` +
     `🕐 آخرین بروزرسانی: ${p.updatedAt}`
   );
+}
+
+async function getCryptoDetailsText(symbol: CryptoSymbol) {
+  const coin = CRYPTO_DATABASE[symbol];
+  const priceUsd = await fetchCoinGeckoUsd(coin.id);
+  const priceText =
+    priceUsd === null
+      ? "در دسترس نیست"
+      : `$${priceUsd.toLocaleString("en-US", {
+          maximumFractionDigits: 8,
+        })}`;
+
+  let text =
+    `📌 *نام:* ${coin.name}\n` +
+    `🔤 *نماد:* \`${coin.symbol}\`\n` +
+    `🌐 *شبکه:* ${coin.network}\n` +
+    `💰 *قیمت لحظه‌ای:* ${priceText}\n\n`;
+
+  if (coin.contract) {
+    text += `📝 *آدرس کانترکت \\(برای کپی کلیک کنید\\):*\n\`${coin.contract}\``;
+  } else {
+    text += "ℹ️ این ارز شبکهٔ اختصاصی دارد و به آدرس کانترکت نیاز ندارد.";
+  }
+
+  return text;
 }
 
 async function getAllText() {
@@ -431,6 +531,53 @@ bot.on("callback_query", async (query) => {
         parse_mode: "Markdown",
         reply_markup: mainKeyboard,
       });
+      return;
+    }
+
+    // ── Crypto metadata menu ──
+    if (data === "crypto_info_menu") {
+      await bot.editMessageText(
+        "💎 *اطلاعات ارزهای دیجیتال*\n\nبرای مشاهدهٔ قیمت، شبکه و آدرس کانترکت یک ارز را انتخاب کنید:",
+        {
+          chat_id: chatId,
+          message_id: msgId,
+          parse_mode: "Markdown",
+          reply_markup: cryptoInfoKeyboard,
+        },
+      );
+      return;
+    }
+
+    // ── Crypto metadata and live price ──
+    if (data.startsWith("crypto_info_")) {
+      const symbol = data.slice("crypto_info_".length) as CryptoSymbol;
+      const coin = CRYPTO_DATABASE[symbol];
+      if (!coin) return;
+
+      await bot.editMessageText("⏳ در حال دریافت قیمت لحظه‌ای...", {
+        chat_id: chatId,
+        message_id: msgId,
+      });
+
+      try {
+        const text = await getCryptoDetailsText(symbol);
+        await bot.editMessageText(text, {
+          chat_id: chatId,
+          message_id: msgId,
+          parse_mode: "Markdown",
+          reply_markup: cryptoDetailsKeyboard(symbol),
+        });
+      } catch (err) {
+        logger.error({ err, symbol }, "Failed to fetch crypto details");
+        await bot.editMessageText(
+          "❌ دریافت اطلاعات ارز ناموفق بود. لطفاً دوباره تلاش کنید.",
+          {
+            chat_id: chatId,
+            message_id: msgId,
+            reply_markup: cryptoInfoKeyboard,
+          },
+        );
+      }
       return;
     }
 

@@ -190,6 +190,24 @@ export async function fetchGlobalPrices(): Promise<GlobalCryptoPrices> {
   );
 }
 
+export async function fetchCoinGeckoUsd(coinId: string): Promise<number | null> {
+  try {
+    const { data } = await axios.get<Record<string, { usd?: number }>>(
+      "https://api.coingecko.com/api/v3/simple/price",
+      {
+        params: { ids: coinId, vs_currencies: "usd" },
+        timeout: 8000,
+        headers: CG_HEADERS,
+      },
+    );
+    const price = data[coinId]?.usd;
+    return typeof price === "number" && Number.isFinite(price) ? price : null;
+  } catch (err) {
+    logger.warn({ err, coinId }, "Failed to fetch CoinGecko token price");
+    return null;
+  }
+}
+
 export type IranianCryptoPriceKey = "USDT" | "BTC" | "ETH" | "TRX" | "SOL" | "TON";
 export type IranianCryptoPrices = Record<IranianCryptoPriceKey, number>;
 
