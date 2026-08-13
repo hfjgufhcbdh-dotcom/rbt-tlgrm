@@ -3,9 +3,14 @@ import type TelegramBot from "node-telegram-bot-api";
 import { and, desc, eq, lt } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { priceHistoryTable, usersTable } from "@workspace/db/schema";
-import { fetchLivePrices, fetchRawPrices } from "./prices";
+import {
+  fetchGlobalPrices,
+  fetchLivePrices,
+  fetchRawPrices,
+  type GlobalCryptoPrices,
+} from "./prices";
 import { logger } from "./logger";
-import { generateChartBuffer } from "./chart";
+import { generateChangeChartBuffer, generateChartBuffer } from "./chart";
 import {
   deleteTrackedMessages,
   sendMessageAndSave,
@@ -19,6 +24,23 @@ const REPORT_ASSETS: Array<{ asset: ReportAsset; label: string }> = [
   { asset: "btc", label: "بیت‌کوین" },
   { asset: "eth", label: "اتریوم" },
   { asset: "ton", label: "تون‌کوین" },
+];
+
+type GlobalReportItem = {
+  name: string;
+  price: number;
+  change: number;
+};
+
+type DailyReportData = {
+  text: string;
+  globalItems: GlobalReportItem[];
+};
+
+const GLOBAL_REPORT_ASSETS: Array<{ id: string; name: string }> = [
+  { id: "bitcoin", name: "بیت‌کوین (BTC)" },
+  { id: "ethereum", name: "اتریوم (ETH)" },
+  { id: "solana", name: "سولانا (SOL)" },
 ];
 
 export function calculateDailyChange(todayPrice: number, yesterdayPrice: number): string {
@@ -54,7 +76,49 @@ async function getPreviousPrice(asset: ReportAsset, cutoff: Date): Promise<numbe
   return Number.isFinite(price) ? price : null;
 }
 
-async function buildDailyReport(): Promise<string> {
+function buildGlobalReportItems(prices: GlobalCryptoPrices): GlobalReportItem[] {
+  return GLOBAL_REPORT_ASSETS.flatMap(({ id, name }) => {
+    const item = prices[id];
+    if (
+      !item ||
+      !Number.isFinite(item.usd) ||
+      item.usd_24h_change === null ||
+      !Number.isFinite(item.usd_24h_change)
+    ) {
+      return [];
+    }
+
+    return [{
+      name,
+      price: item.usd,
+      change: item.usd_24h_change,
+    }];
+  });
+}
+
+function formatUsdPrice(price: number): string {
+  return price >= 1
+    ? price.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 2,
+      })
+    : `$${price.toFixed(6)}`;
+}
+
+function formatGlobalReport(items: GlobalReportItem[]): string {
+  return items.map((item) => {
+    const icon = item.change > 0 ? "🟢" : item.change < 0 ? "🔴" : "⚪";
+    const sign = item.change > 0 ? "+" : "";
+    return (
+      `🔹 *${item.name}*\n` +
+      `   قیمت: ${formatUsdPrice(item.price)}\n` +
+      `   تغییر ۲۴ ساعته: ${icon} ${sign}${item.change.toFixed(2)}٪`
+    );
+  }).join("\n\n");
+}
+
+async function buildDailyReport(): Promise<DailyReportData> {
   await fetchLivePrices();
   const raw = await fetchRawPrices();
   if (!raw) {
@@ -81,23 +145,49 @@ async function buildDailyReport(): Promise<string> {
     }),
   );
 
-  return (
+  let globalItems: GlobalReportItem[] = [];
+  try {
+    globalItems = buildGlobalReportItems(await fetchGlobalPrices());
+  } catch (err) {
+    logger.warn({ err }, "Global market data unavailable for daily report");
+  }
+
+  const globalSection = globalItems.length > 0
+    ? `\n\n🌐 *بازار جهانی و کریپتو*\n\n${formatGlobalReport(globalItems)}`
+    : "";
+
+  return {
+    text: (
     "📊 *گزارش تغییرات روزانه قیمت*\n\n" +
     "مقایسه با آخرین snapshot حدود ۲۴ ساعت قبل:\n\n" +
     lines.join("\n") +
     "\n\n🕐 زمان گزارش: " +
-    new Date().toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
-  );
+      new Date().toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) +
+      globalSection
+    ),
+    globalItems,
+  };
 }
 
 async function sendDailyReport(bot: TelegramBot): Promise<void> {
-  const report = await buildDailyReport();
+  const reportData = await buildDailyReport();
   const users = await db.select({ chatId: usersTable.chatId }).from(usersTable);
   let chartBuffer: Buffer | null = null;
+  let chartCaption = "📈 نمودار ۷ روزهٔ بیت‌کوین";
 
   try {
-    const chart = await generateChartBuffer("crypto", "btc", "7");
-    chartBuffer = chart.buffer;
+    if (reportData.globalItems.length > 0) {
+      chartBuffer = await generateChangeChartBuffer(
+        reportData.globalItems.map((item) => ({
+          label: item.name.split(" ")[0] ?? item.name,
+          change: item.change,
+        })),
+      );
+      chartCaption = "📊 نمودار تغییرات ۲۴ ساعت اخیر بازار جهانی و کریپتو";
+    } else {
+      const chart = await generateChartBuffer("crypto", "btc", "7");
+      chartBuffer = chart.buffer;
+    }
   } catch (err) {
     logger.warn({ err }, "Daily report chart unavailable; sending text report");
   }
@@ -107,11 +197,11 @@ async function sendDailyReport(bot: TelegramBot): Promise<void> {
       await deleteTrackedMessages(bot, chatId);
       if (chartBuffer) {
         return sendPhotoAndSave(bot, chatId, chartBuffer, {
-          caption: `${report}\n\n📈 نمودار ۷ روزهٔ بیت‌کوین`,
+          caption: `${reportData.text}\n\n${chartCaption}`,
           parse_mode: "Markdown",
         });
       }
-      return sendMessageAndSave(bot, chatId, report, { parse_mode: "Markdown" });
+      return sendMessageAndSave(bot, chatId, reportData.text, { parse_mode: "Markdown" });
     }),
   );
   const failed = results.filter((result) => result.status === "rejected").length;

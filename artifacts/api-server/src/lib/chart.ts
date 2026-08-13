@@ -19,6 +19,11 @@ export interface ChartAssetDef {
   emoji: string;
 }
 
+export interface ChangeChartPoint {
+  label: string;
+  change: number;
+}
+
 // ── Category & asset metadata ──────────────────────────────────────────────
 
 export const CHART_CATEGORIES: Record<ChartCategory, { label: string; emoji: string }> = {
@@ -447,4 +452,65 @@ export async function generateChartBuffer(
     `تغییر: ${changeSign}${changePct}%`;
 
   return { buffer: Buffer.from(imgResp.data), caption };
+}
+
+export async function generateChangeChartBuffer(
+  points: ChangeChartPoint[],
+): Promise<Buffer> {
+  const validPoints = points.filter(
+    (point) => point.label.trim().length > 0 && Number.isFinite(point.change),
+  );
+
+  if (validPoints.length === 0) {
+    throw new Error("No valid change data available for chart");
+  }
+
+  const changes = validPoints.map((point) => point.change);
+  const chartConfig = {
+    type: "bar",
+    data: {
+      labels: validPoints.map((point) => point.label),
+      datasets: [{
+        label: "تغییرات ۲۴ ساعت گذشته (%)",
+        data: changes,
+        backgroundColor: changes.map((value) =>
+          value >= 0 ? "rgba(46, 204, 113, 0.7)" : "rgba(231, 76, 60, 0.7)",
+        ),
+        borderColor: changes.map((value) =>
+          value >= 0 ? "#2ecc71" : "#e74c3c",
+        ),
+        borderWidth: 1,
+      }],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: "نمودار درصد تغییرات ۲۴ ساعت اخیر",
+          font: { size: 15, weight: "bold" },
+        },
+      },
+      scales: {
+        y: {
+          title: { display: true, text: "%" },
+          grid: { color: "rgba(0,0,0,0.08)" },
+        },
+        x: {
+          grid: { display: false },
+        },
+      },
+    },
+  };
+
+  const chartUrl =
+    `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}` +
+    `&width=720&height=420&backgroundColor=white`;
+
+  const response = await axios.get<Buffer>(chartUrl, {
+    responseType: "arraybuffer",
+    timeout: 20_000,
+  });
+
+  return Buffer.from(response.data);
 }
