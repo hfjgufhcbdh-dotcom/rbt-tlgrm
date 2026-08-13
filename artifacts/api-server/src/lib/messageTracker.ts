@@ -1,9 +1,27 @@
 import type TelegramBot from "node-telegram-bot-api";
 
 type SendMessageOptions = Parameters<TelegramBot["sendMessage"]>[2];
+type SendPhotoOptions = Parameters<TelegramBot["sendPhoto"]>[2];
+type Photo = Parameters<TelegramBot["sendPhoto"]>[1];
 
 const MAX_TRACKED_MESSAGES_PER_CHAT = 10;
 const trackedMessageIds = new Map<number, Set<number>>();
+
+function rememberMessage(chatId: number, messageId: number): void {
+  let messageIds = trackedMessageIds.get(chatId);
+
+  if (!messageIds) {
+    messageIds = new Set<number>();
+    trackedMessageIds.set(chatId, messageIds);
+  }
+
+  messageIds.add(messageId);
+  while (messageIds.size > MAX_TRACKED_MESSAGES_PER_CHAT) {
+    const oldestMessageId = messageIds.values().next().value as number | undefined;
+    if (oldestMessageId === undefined) break;
+    messageIds.delete(oldestMessageId);
+  }
+}
 
 export async function sendMessageAndSave(
   bot: TelegramBot,
@@ -12,20 +30,18 @@ export async function sendMessageAndSave(
   options?: SendMessageOptions,
 ) {
   const sentMessage = await bot.sendMessage(chatId, text, options);
-  let messageIds = trackedMessageIds.get(chatId);
+  rememberMessage(chatId, sentMessage.message_id);
+  return sentMessage;
+}
 
-  if (!messageIds) {
-    messageIds = new Set<number>();
-    trackedMessageIds.set(chatId, messageIds);
-  }
-
-  messageIds.add(sentMessage.message_id);
-  while (messageIds.size > MAX_TRACKED_MESSAGES_PER_CHAT) {
-    const oldestMessageId = messageIds.values().next().value as number | undefined;
-    if (oldestMessageId === undefined) break;
-    messageIds.delete(oldestMessageId);
-  }
-
+export async function sendPhotoAndSave(
+  bot: TelegramBot,
+  chatId: number,
+  photo: Photo,
+  options?: SendPhotoOptions,
+) {
+  const sentMessage = await bot.sendPhoto(chatId, photo, options);
+  rememberMessage(chatId, sentMessage.message_id);
   return sentMessage;
 }
 

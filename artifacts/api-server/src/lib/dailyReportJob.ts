@@ -5,7 +5,12 @@ import { db } from "@workspace/db";
 import { priceHistoryTable, usersTable } from "@workspace/db/schema";
 import { fetchLivePrices, fetchRawPrices } from "./prices";
 import { logger } from "./logger";
-import { deleteTrackedMessages, sendMessageAndSave } from "./messageTracker";
+import { generateChartBuffer } from "./chart";
+import {
+  deleteTrackedMessages,
+  sendMessageAndSave,
+  sendPhotoAndSave,
+} from "./messageTracker";
 
 type ReportAsset = "gold" | "btc" | "eth" | "ton";
 
@@ -88,10 +93,24 @@ async function buildDailyReport(): Promise<string> {
 async function sendDailyReport(bot: TelegramBot): Promise<void> {
   const report = await buildDailyReport();
   const users = await db.select({ chatId: usersTable.chatId }).from(usersTable);
+  let chartBuffer: Buffer | null = null;
+
+  try {
+    const chart = await generateChartBuffer("crypto", "btc", "7");
+    chartBuffer = chart.buffer;
+  } catch (err) {
+    logger.warn({ err }, "Daily report chart unavailable; sending text report");
+  }
 
   const results = await Promise.allSettled(
     users.map(async ({ chatId }) => {
       await deleteTrackedMessages(bot, chatId);
+      if (chartBuffer) {
+        return sendPhotoAndSave(bot, chatId, chartBuffer, {
+          caption: `${report}\n\n📈 نمودار ۷ روزهٔ بیت‌کوین`,
+          parse_mode: "Markdown",
+        });
+      }
       return sendMessageAndSave(bot, chatId, report, { parse_mode: "Markdown" });
     }),
   );
