@@ -5,6 +5,7 @@ import { db } from "@workspace/db";
 import { priceHistoryTable, usersTable } from "@workspace/db/schema";
 import { fetchLivePrices, fetchRawPrices } from "./prices";
 import { logger } from "./logger";
+import { deleteTrackedMessages, sendMessageAndSave } from "./messageTracker";
 
 type ReportAsset = "gold" | "btc" | "eth" | "ton";
 
@@ -89,9 +90,10 @@ async function sendDailyReport(bot: TelegramBot): Promise<void> {
   const users = await db.select({ chatId: usersTable.chatId }).from(usersTable);
 
   const results = await Promise.allSettled(
-    users.map(({ chatId }) =>
-      bot.sendMessage(chatId, report, { parse_mode: "Markdown" }),
-    ),
+    users.map(async ({ chatId }) => {
+      await deleteTrackedMessages(bot, chatId);
+      return sendMessageAndSave(bot, chatId, report, { parse_mode: "Markdown" });
+    }),
   );
   const failed = results.filter((result) => result.status === "rejected").length;
 
