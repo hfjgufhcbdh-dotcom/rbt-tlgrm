@@ -155,12 +155,19 @@ async function fetchCryptoUsd(): Promise<CryptoRates> {
   };
 }
 
-export async function fetchGlobalPrices(): Promise<GlobalCryptoPrices> {
+export async function fetchCoinGeckoPrices(
+  coinIds: string[],
+): Promise<GlobalCryptoPrices> {
+  const uniqueCoinIds = [...new Set(coinIds.map((coinId) => coinId.trim().toLowerCase()))]
+    .filter((coinId) => /^[a-z0-9-]{2,100}$/.test(coinId));
+
+  if (uniqueCoinIds.length === 0) return {};
+
   const { data } = await axios.get<Record<string, { usd?: number; usd_24h_change?: number }>>(
     "https://api.coingecko.com/api/v3/simple/price",
     {
       params: {
-        ids: GLOBAL_COIN_IDS.join(","),
+        ids: uniqueCoinIds.join(","),
         vs_currencies: "usd",
         include_24hr_change: "true",
       },
@@ -170,7 +177,7 @@ export async function fetchGlobalPrices(): Promise<GlobalCryptoPrices> {
   );
 
   return Object.fromEntries(
-    GLOBAL_COIN_IDS.map((coinId) => {
+    uniqueCoinIds.map((coinId) => {
       const value = data[coinId];
       if (typeof value?.usd !== "number" || !Number.isFinite(value.usd)) {
         throw new Error(`CoinGecko returned no USD price for ${coinId}`);
@@ -188,6 +195,10 @@ export async function fetchGlobalPrices(): Promise<GlobalCryptoPrices> {
       ];
     }),
   );
+}
+
+export async function fetchGlobalPrices(): Promise<GlobalCryptoPrices> {
+  return fetchCoinGeckoPrices([...GLOBAL_COIN_IDS]);
 }
 
 export async function fetchCoinGeckoUsd(coinId: string): Promise<number | null> {

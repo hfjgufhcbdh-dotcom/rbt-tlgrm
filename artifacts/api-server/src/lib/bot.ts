@@ -12,6 +12,11 @@ import { logger } from "./logger";
 import { db } from "@workspace/db";
 import { alertsTable, usersTable } from "@workspace/db/schema";
 import { eq, and, count } from "drizzle-orm";
+import {
+  addUserCoin,
+  ensureDefaultUserCoins,
+  getUserCoinIds,
+} from "./userCoins";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 if (!TOKEN) throw new Error("TELEGRAM_BOT_TOKEN environment variable is required");
@@ -376,6 +381,7 @@ const WELCOME =
   `🤖 *ربات قیمت طلا، سکه و ارز*\n\n` +
   `به ربات قیمت لحظه‌ای خوش آمدید!\n` +
   `قیمت‌ها به‌صورت لحظه‌ای از بازار دریافت می‌شوند.\n\n` +
+  `برای افزودن ارز به گزارش شبانه: \`/add_coin solana\`\n\n` +
   `یکی از گزینه‌ها را انتخاب کنید:`;
 
 // ─── Alert creation state machine ───────────────────────────────────────────
@@ -440,10 +446,53 @@ bot.onText(/\/start/, async (msg) => {
     logger.error({ err }, "Failed to upsert user");
   }
 
+  try {
+    await ensureDefaultUserCoins(chatId);
+  } catch (err) {
+    logger.error({ err, chatId }, "Failed to initialize user crypto list");
+  }
+
   await bot.sendMessage(chatId, WELCOME, {
     parse_mode: "Markdown",
     reply_markup: mainKeyboard,
   });
+});
+
+// ─── /add_coin (add a CoinGecko id to the user's nightly report) ──────────────
+bot.onText(/^\/add_coin(?:@\w+)?(?:\s+(.+))?$/i, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const rawCoinId = match?.[1]?.trim();
+
+  if (!rawCoinId) {
+    await bot.sendMessage(
+      chatId,
+      "❌ لطفاً شناسهٔ CoinGecko را وارد کنید.\nمثال: `/add_coin solana`",
+      { parse_mode: "Markdown" },
+    );
+    return;
+  }
+
+  try {
+    const result = await addUserCoin(chatId, rawCoinId);
+    if (!result.ok) {
+      const message = result.reason === "invalid"
+        ? "❌ شناسهٔ ارز معتبر نیست. فقط حروف انگلیسی، عدد و خط تیره مجاز است."
+        : "❌ این ارز در CoinGecko پیدا نشد یا فعلاً قیمت معتبری ندارد.";
+      await bot.sendMessage(chatId, message);
+      return;
+    }
+
+    const label = result.coinId.toUpperCase();
+    await bot.sendMessage(
+      chatId,
+      result.alreadyExists
+        ? `⚠️ ارز ${label} قبلاً در فهرست گزارش شما وجود داشت.`
+        : `✅ ارز ${label} به گزارش شبانهٔ شما اضافه شد.`,
+    );
+  } catch (err) {
+    logger.error({ err, chatId, rawCoinId }, "Failed to add user coin");
+    await bot.sendMessage(chatId, "❌ افزودن ارز انجام نشد. لطفاً دوباره تلاش کنید.");
+  }
 });
 
 // ─── /stats (owner only) ──────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { and, desc, eq, lt } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { priceHistoryTable, usersTable } from "@workspace/db/schema";
 import {
-  fetchGlobalPrices,
+  fetchCoinGeckoPrices,
   fetchLivePrices,
   fetchRawPrices,
   type GlobalCryptoPrices,
@@ -16,6 +16,11 @@ import {
   sendMessageAndSave,
   sendPhotoAndSave,
 } from "./messageTracker";
+import {
+  DEFAULT_USER_COIN_IDS,
+  ensureDefaultUserCoins,
+  getUserCoinIdsForChats,
+} from "./userCoins";
 
 type ReportAsset = "gold" | "btc" | "eth" | "ton";
 
@@ -37,11 +42,15 @@ type DailyReportData = {
   globalItems: GlobalReportItem[];
 };
 
-const GLOBAL_REPORT_ASSETS: Array<{ id: string; name: string }> = [
-  { id: "bitcoin", name: "بیت‌کوین (BTC)" },
-  { id: "ethereum", name: "اتریوم (ETH)" },
-  { id: "solana", name: "سولانا (SOL)" },
-];
+const COIN_LABELS: Record<string, string> = {
+  rabbitcoin: "RabBitcoin (RBTC)",
+  memefi: "MemeFi (MEMEFI)",
+  bitcoin: "بیت‌کوین (BTC)",
+  ethereum: "اتریوم (ETH)",
+  solana: "سولانا (SOL)",
+  "the-open-network": "تون‌کوین (TON)",
+  tether: "تتر (USDT)",
+};
 
 export function calculateDailyChange(todayPrice: number, yesterdayPrice: number): string {
   if (!Number.isFinite(todayPrice) || !Number.isFinite(yesterdayPrice) || yesterdayPrice <= 0) {
@@ -76,8 +85,11 @@ async function getPreviousPrice(asset: ReportAsset, cutoff: Date): Promise<numbe
   return Number.isFinite(price) ? price : null;
 }
 
-function buildGlobalReportItems(prices: GlobalCryptoPrices): GlobalReportItem[] {
-  return GLOBAL_REPORT_ASSETS.flatMap(({ id, name }) => {
+function buildGlobalReportItems(
+  prices: GlobalCryptoPrices,
+  coinIds: string[],
+): GlobalReportItem[] {
+  return coinIds.flatMap((id) => {
     const item = prices[id];
     if (
       !item ||
@@ -89,7 +101,7 @@ function buildGlobalReportItems(prices: GlobalCryptoPrices): GlobalReportItem[] 
     }
 
     return [{
-      name,
+      name: COIN_LABELS[id] ?? id.toUpperCase(),
       price: item.usd,
       change: item.usd_24h_change,
     }];
@@ -118,7 +130,7 @@ function formatGlobalReport(items: GlobalReportItem[]): string {
   }).join("\n\n");
 }
 
-async function buildDailyReport(): Promise<DailyReportData> {
+async function buildDailyReportBase(): Promise<string> {
   await fetchLivePrices();
   const raw = await fetchRawPrices();
   if (!raw) {
@@ -145,55 +157,85 @@ async function buildDailyReport(): Promise<DailyReportData> {
     }),
   );
 
-  let globalItems: GlobalReportItem[] = [];
-  try {
-    globalItems = buildGlobalReportItems(await fetchGlobalPrices());
-  } catch (err) {
-    logger.warn({ err }, "Global market data unavailable for daily report");
-  }
-
-  const globalSection = globalItems.length > 0
-    ? `\n\n🌐 *بازار جهانی و کریپتو*\n\n${formatGlobalReport(globalItems)}`
-    : "";
-
-  return {
-    text: (
+  return (
     "📊 *گزارش تغییرات روزانه قیمت*\n\n" +
     "مقایسه با آخرین snapshot حدود ۲۴ ساعت قبل:\n\n" +
     lines.join("\n") +
     "\n\n🕐 زمان گزارش: " +
-      new Date().toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) +
-      globalSection
-    ),
+    new Date().toLocaleString("fa-IR", { timeZone: "Asia/Tehran" })
+  );
+}
+
+function buildDailyReport(
+  baseText: string,
+  globalPrices: GlobalCryptoPrices,
+  coinIds: string[],
+): DailyReportData {
+  const globalItems = buildGlobalReportItems(globalPrices, coinIds);
+  const globalSection = globalItems.length > 0
+    ? `\n\n🌐 *بازار جهانی و کریپتو*\n\n${formatGlobalReport(globalItems)}`
+    : "\n\n🌐 *بازار جهانی و کریپتو*\n\nاطلاعات معتبر برای ارزهای انتخابی موجود نیست.";
+
+  return {
+    text: `${baseText}${globalSection}`,
     globalItems,
   };
 }
 
 async function sendDailyReport(bot: TelegramBot): Promise<void> {
-  const reportData = await buildDailyReport();
   const users = await db.select({ chatId: usersTable.chatId }).from(usersTable);
-  let chartBuffer: Buffer | null = null;
-  let chartCaption = "📈 نمودار ۷ روزهٔ بیت‌کوین";
+  const chatIds = users.map(({ chatId }) => chatId);
 
+  await Promise.all(
+    chatIds.map((chatId) =>
+      ensureDefaultUserCoins(chatId).catch((err) => {
+        logger.warn({ err, chatId }, "Failed to initialize user coin list for report");
+      }),
+    ),
+  );
+
+  const userCoinMap = await getUserCoinIdsForChats(chatIds);
+  const allCoinIds = [
+    ...new Set(
+      chatIds.flatMap(
+        (chatId) => userCoinMap.get(chatId) ?? [...DEFAULT_USER_COIN_IDS],
+      ),
+    ),
+  ];
+
+  let globalPrices: GlobalCryptoPrices = {};
   try {
-    if (reportData.globalItems.length > 0) {
-      chartBuffer = await generateChangeChartBuffer(
-        reportData.globalItems.map((item) => ({
-          label: item.name.split(" ")[0] ?? item.name,
-          change: item.change,
-        })),
-      );
-      chartCaption = "📊 نمودار تغییرات ۲۴ ساعت اخیر بازار جهانی و کریپتو";
-    } else {
-      const chart = await generateChartBuffer("crypto", "btc", "7");
-      chartBuffer = chart.buffer;
-    }
+    globalPrices = await fetchCoinGeckoPrices(allCoinIds);
   } catch (err) {
-    logger.warn({ err }, "Daily report chart unavailable; sending text report");
+    logger.warn({ err }, "Global market data unavailable for daily report");
   }
+
+  const baseReport = await buildDailyReportBase();
 
   const results = await Promise.allSettled(
     users.map(async ({ chatId }) => {
+      const coinIds = userCoinMap.get(chatId) ?? [...DEFAULT_USER_COIN_IDS];
+      const reportData = buildDailyReport(baseReport, globalPrices, coinIds);
+      let chartBuffer: Buffer | null = null;
+      let chartCaption = "📈 نمودار ۷ روزهٔ بیت‌کوین";
+
+      try {
+        if (reportData.globalItems.length > 0) {
+          chartBuffer = await generateChangeChartBuffer(
+            reportData.globalItems.map((item) => ({
+              label: item.name.split(" ")[0] ?? item.name,
+              change: item.change,
+            })),
+          );
+          chartCaption = "📊 نمودار تغییرات ۲۴ ساعت اخیر ارزهای انتخابی شما";
+        } else {
+          const chart = await generateChartBuffer("crypto", "btc", "7");
+          chartBuffer = chart.buffer;
+        }
+      } catch (err) {
+        logger.warn({ err, chatId }, "Daily report chart unavailable; sending text report");
+      }
+
       await deleteTrackedMessages(bot, chatId);
       if (chartBuffer) {
         return sendPhotoAndSave(bot, chatId, chartBuffer, {
