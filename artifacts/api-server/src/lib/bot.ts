@@ -90,18 +90,18 @@ const CRYPTO_DATABASE = {
     contract: null,
   },
   RBTC: {
-    id: "rocky-rabbit",
-    name: "راکی ربیت (Rocky Rabbit)",
+    id: null,
+    name: "راکی ربیت (RabBitcoin)",
     symbol: "RBTC",
     network: "TON",
-    contract: "EQA-X_3EjA3xR34eTInP0xVfS-B0q9u1gC1V05786_RBTC",
+    contract: "EQCD7lrrxpOcq5A5R6nTLeF1kuIbl1BKCe5OnanGe3cB4FVB",
   },
   SOON: {
-    id: "ton-station",
-    name: "تون استیشن (Ton Station)",
-    symbol: "SOON",
+    id: "soon",
+    name: "تون استیشن (TON Station)",
+    symbol: "MRSOON",
     network: "TON",
-    contract: "EQC3N_TON_STATION_CONTRACT_ADDRESS",
+    contract: "EQCwe0g3cEFhsz4VK5nrtOZBkFeSISxhCVUqvON7Im__SOON",
   },
 } as const;
 
@@ -322,7 +322,7 @@ async function getCryptoText() {
 
 async function getCryptoDetailsText(symbol: CryptoSymbol) {
   const coin = CRYPTO_DATABASE[symbol];
-  const priceUsd = await fetchCoinGeckoUsd(coin.id);
+  const priceUsd = coin.id === null ? null : await fetchCoinGeckoUsd(coin.id);
   const priceText =
     priceUsd === null
       ? "در دسترس نیست"
