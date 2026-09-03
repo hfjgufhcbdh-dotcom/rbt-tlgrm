@@ -126,6 +126,76 @@ export type GlobalCryptoPrice = {
 
 export type GlobalCryptoPrices = Record<string, GlobalCryptoPrice>;
 
+export interface CoinMarketData {
+  id: string;
+  name: string;
+  symbol: string;
+  current_price: number;
+  price_change_percentage_24h: number | null;
+  high_24h: number | null;
+  low_24h: number | null;
+  market_cap_rank: number | null;
+  market_cap: number | null;
+  total_volume: number | null;
+}
+
+export async function fetchCoinMarketData(
+  coinIds: string[],
+): Promise<CoinMarketData[]> {
+  const uniqueCoinIds = [...new Set(coinIds.map((coinId) => coinId.trim().toLowerCase()))]
+    .filter((coinId) => /^[a-z0-9-]{2,100}$/.test(coinId));
+
+  if (uniqueCoinIds.length === 0) return [];
+
+  const { data } = await axios.get<unknown[]>(
+    "https://api.coingecko.com/api/v3/coins/markets",
+    {
+      params: {
+        vs_currency: "usd",
+        ids: uniqueCoinIds.join(","),
+        order: "market_cap_desc",
+        per_page: uniqueCoinIds.length,
+        page: 1,
+        sparkline: false,
+      },
+      timeout: 15_000,
+      headers: CG_HEADERS,
+    },
+  );
+
+  return data.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const value = item as Record<string, unknown>;
+    if (
+      typeof value.id !== "string" ||
+      typeof value.name !== "string" ||
+      typeof value.symbol !== "string" ||
+      typeof value.current_price !== "number" ||
+      !Number.isFinite(value.current_price)
+    ) {
+      return [];
+    }
+
+    const nullableNumber = (key: string): number | null => {
+      const number = value[key];
+      return typeof number === "number" && Number.isFinite(number) ? number : null;
+    };
+
+    return [{
+      id: value.id,
+      name: value.name,
+      symbol: value.symbol,
+      current_price: value.current_price,
+      price_change_percentage_24h: nullableNumber("price_change_percentage_24h"),
+      high_24h: nullableNumber("high_24h"),
+      low_24h: nullableNumber("low_24h"),
+      market_cap_rank: nullableNumber("market_cap_rank"),
+      market_cap: nullableNumber("market_cap"),
+      total_volume: nullableNumber("total_volume"),
+    }];
+  });
+}
+
 const GLOBAL_COIN_IDS = [
   "bitcoin",
   "ethereum",

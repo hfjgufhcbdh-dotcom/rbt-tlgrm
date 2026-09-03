@@ -1,5 +1,10 @@
 import TelegramBot from "node-telegram-bot-api";
-import { fetchCoinGeckoUsd, fetchLivePrices } from "./prices";
+import {
+  fetchCoinGeckoUsd,
+  fetchCoinMarketData,
+  fetchLivePrices,
+  type CoinMarketData,
+} from "./prices";
 import {
   generateChartBuffer,
   CHART_CATEGORIES,
@@ -15,7 +20,6 @@ import { eq, and, count } from "drizzle-orm";
 import {
   addUserCoin,
   ensureDefaultUserCoins,
-  getUserCoinIds,
 } from "./userCoins";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -59,6 +63,87 @@ const mainKeyboard = {
     [{ text: "🔔 هشدار قیمت", callback_data: "alerts_menu" }],
   ],
 };
+
+const CRYPTO_MARKET_OPTIONS = [
+  { id: "bitcoin", label: "₿ بیت‌کوین (BTC)" },
+  { id: "ethereum", label: "♦️ اتریوم (ETH)" },
+  { id: "binancecoin", label: "🟡 بایننس‌کوین (BNB)" },
+  { id: "solana", label: "🟣 سولانا (SOL)" },
+  { id: "the-open-network", label: "💎 تون‌کوین (TON)" },
+] as const;
+
+function cryptoMarketKeyboard() {
+  return {
+    inline_keyboard: [
+      ...CRYPTO_MARKET_OPTIONS.map((coin) => [
+        { text: coin.label, callback_data: `crypto_market_${coin.id}` },
+      ]),
+      [{ text: "🔄 بروزرسانی همه", callback_data: "crypto_market_all" }],
+      [{ text: "🏠 بازگشت به منو", callback_data: "menu" }],
+    ],
+  };
+}
+
+function cryptoMarketAfterKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: "🔄 بروزرسانی همه", callback_data: "crypto_market_all" }],
+      [{ text: "⬅️ فهرست ارزها", callback_data: "crypto_market_menu" }],
+      [{ text: "🏠 بازگشت به منو", callback_data: "menu" }],
+    ],
+  };
+}
+
+function formatMarketUsd(value: number | null): string {
+  if (value === null) return "در دسترس نیست";
+  return `$${value.toLocaleString("en-US", {
+    minimumFractionDigits: value < 1 ? 6 : 0,
+    maximumFractionDigits: value < 1 ? 8 : 2,
+  })}`;
+}
+
+function formatMarketChange(value: number | null): string {
+  if (value === null) return "اطلاعات ندارد";
+  const icon = value > 0 ? "🟢" : value < 0 ? "🔴" : "⚪";
+  const sign = value > 0 ? "+" : "";
+  return `${icon} ${sign}${value.toFixed(2)}٪`;
+}
+
+function cryptoMarketMenuText(): string {
+  return "💰 *قیمت ارزهای دیجیتال*\n\nیک ارز را انتخاب کنید:";
+}
+
+function cryptoMarketLabel(coinId: string, fallbackName: string): string {
+  return CRYPTO_MARKET_OPTIONS.find((coin) => coin.id === coinId)?.label ?? fallbackName;
+}
+
+function formatCryptoMarketDetails(coin: CoinMarketData): string {
+  return (
+    `💰 *${cryptoMarketLabel(coin.id, coin.name)}*\n\n` +
+    `💵 قیمت: ${formatMarketUsd(coin.current_price)}\n` +
+    `${formatMarketChange(coin.price_change_percentage_24h)} تغییر ۲۴ ساعت\n` +
+    `📈 بیشترین ۲۴ ساعت: ${formatMarketUsd(coin.high_24h)}\n` +
+    `📉 کمترین ۲۴ ساعت: ${formatMarketUsd(coin.low_24h)}\n` +
+    `🏆 رتبه بازار: ${coin.market_cap_rank === null ? "در دسترس نیست" : `#${coin.market_cap_rank}`}\n` +
+    `📊 ارزش بازار: ${formatMarketUsd(coin.market_cap)}\n` +
+    `💱 حجم معاملات: ${formatMarketUsd(coin.total_volume)}\n\n` +
+    `⚠️ این اطلاعات توصیهٔ سرمایه‌گذاری نیست.`
+  );
+}
+
+function formatCryptoMarketList(coins: CoinMarketData[]): string {
+  const lines = coins.map((coin) =>
+    `${cryptoMarketLabel(coin.id, coin.name)}\n` +
+    `💵 ${formatMarketUsd(coin.current_price)}\n` +
+    `${formatMarketChange(coin.price_change_percentage_24h)}\n`,
+  );
+
+  return (
+    "💰 *قیمت ارزهای دیجیتال*\n\n" +
+    (lines.length > 0 ? lines.join("\n") : "❌ اطلاعات بازار در دسترس نیست.") +
+    "\n⚠️ این اطلاعات توصیهٔ سرمایه‌گذاری نیست."
+  );
+}
 
 const CRYPTO_DATABASE = {
   BTC: {
@@ -495,6 +580,19 @@ bot.onText(/^\/add_coin(?:@\w+)?(?:\s+(.+))?$/i, async (msg, match) => {
   }
 });
 
+// ─── /crypto (live CoinGecko market menu) ─────────────────────────────────────
+bot.onText(/^\/crypto(?:@\w+)?$/i, async (msg) => {
+  try {
+    await bot.sendMessage(msg.chat.id, cryptoMarketMenuText(), {
+      parse_mode: "Markdown",
+      reply_markup: cryptoMarketKeyboard(),
+    });
+  } catch (err) {
+    logger.error({ err, chatId: msg.chat.id }, "Failed to open crypto market menu");
+    await bot.sendMessage(msg.chat.id, "❌ باز کردن منوی ارزهای دیجیتال ناموفق بود.");
+  }
+});
+
 // ─── /stats (owner only) ──────────────────────────────────────────────────────
 bot.onText(/\/stats/, async (msg) => {
   const fromId = msg.from?.id;
@@ -630,6 +728,50 @@ bot.on("callback_query", async (query) => {
       return;
     }
 
+    // ── Live crypto market menu ──
+    if (data === "crypto" || data === "crypto_market_menu") {
+      await bot.editMessageText(cryptoMarketMenuText(), {
+        chat_id: chatId,
+        message_id: msgId,
+        parse_mode: "Markdown",
+        reply_markup: cryptoMarketKeyboard(),
+      });
+      return;
+    }
+
+    if (data === "crypto_market_all" || data.startsWith("crypto_market_")) {
+      const requestedId = data === "crypto_market_all"
+        ? null
+        : data.slice("crypto_market_".length);
+      const prices = await fetchCoinMarketData(
+        CRYPTO_MARKET_OPTIONS.map((coin) => coin.id),
+      );
+
+      if (requestedId === null) {
+        await bot.editMessageText(formatCryptoMarketList(prices), {
+          chat_id: chatId,
+          message_id: msgId,
+          parse_mode: "Markdown",
+          reply_markup: cryptoMarketAfterKeyboard(),
+        });
+        return;
+      }
+
+      const coin = prices.find((item) => item.id === requestedId);
+      if (!coin) {
+        await bot.sendMessage(chatId, "❌ اطلاعات این ارز در CoinGecko پیدا نشد.");
+        return;
+      }
+
+      await bot.editMessageText(formatCryptoMarketDetails(coin), {
+        chat_id: chatId,
+        message_id: msgId,
+        parse_mode: "Markdown",
+        reply_markup: cryptoMarketAfterKeyboard(),
+      });
+      return;
+    }
+
     // ── Price sections ──
     const section = data.startsWith("refresh_") ? data.replace("refresh_", "") : data;
     if (["gold", "coin", "currency", "crypto", "all", "parsian_coin"].includes(section)) {
@@ -638,7 +780,15 @@ bot.on("callback_query", async (query) => {
       else if (section === "coin") text = await getCoinText();
       else if (section === "parsian_coin") text = await getCoinParsianText();
       else if (section === "currency") text = await getCurrencyText();
-      else if (section === "crypto") text = await getCryptoText();
+      else if (section === "crypto") {
+        await bot.editMessageText(cryptoMarketMenuText(), {
+          chat_id: chatId,
+          message_id: msgId,
+          parse_mode: "Markdown",
+          reply_markup: cryptoMarketKeyboard(),
+        });
+        return;
+      }
       else text = await getAllText();
 
       await bot.editMessageText(text, {
