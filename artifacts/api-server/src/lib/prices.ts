@@ -101,9 +101,144 @@ async function fetchExchangeRates(): Promise<Rates> {
   };
 }
 
-async function fetchGoldUsd(): Promise<number> {
+export async function fetchGoldUsd(): Promise<number> {
   const { data } = await axios.get("https://api.coinbase.com/v2/prices/XAU-USD/spot", { timeout: 8000 });
   return parseFloat(data.data.amount);
+}
+
+export type GlobalMarketKey =
+  | "brent"
+  | "wti"
+  | "gold"
+  | "silver"
+  | "platinum"
+  | "palladium"
+  | "bitcoin";
+
+export interface GlobalMarketPrice {
+  key: GlobalMarketKey;
+  label: string;
+  price: number | null;
+  unit: string;
+  source: string;
+}
+
+async function fetchYahooMarketPrice(symbol: string): Promise<number> {
+  const { data } = await axios.get<unknown>(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
+    {
+      params: {
+        range: "1d",
+        interval: "1m",
+      },
+      timeout: 8000,
+      headers: CG_HEADERS,
+    },
+  );
+
+  if (!data || typeof data !== "object") {
+    throw new Error(`Yahoo Finance returned invalid data for ${symbol}`);
+  }
+
+  const chart = (data as { chart?: { result?: unknown[] } }).chart;
+  const result = chart?.result?.[0];
+  if (!result || typeof result !== "object") {
+    throw new Error(`Yahoo Finance returned no result for ${symbol}`);
+  }
+
+  const metaPrice = (result as { meta?: { regularMarketPrice?: unknown } }).meta?.regularMarketPrice;
+  if (typeof metaPrice === "number" && Number.isFinite(metaPrice)) {
+    return metaPrice;
+  }
+
+  const closes = (
+    result as {
+      indicators?: { quote?: Array<{ close?: unknown[] }> };
+    }
+  ).indicators?.quote?.[0]?.close;
+  if (closes) {
+    for (let index = closes.length - 1; index >= 0; index -= 1) {
+      const value = closes[index];
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+    }
+  }
+
+  throw new Error(`Yahoo Finance returned no market price for ${symbol}`);
+}
+
+export async function fetchGlobalMarketPrices(): Promise<GlobalMarketPrice[]> {
+  const sources: Array<{
+    key: GlobalMarketKey;
+    label: string;
+    unit: string;
+    source: string;
+    fetch: () => Promise<number>;
+  }> = [
+    {
+      key: "brent",
+      label: "🛢️ نفت برنت",
+      unit: "دلار به‌ازای هر بشکه",
+      source: "Yahoo Finance",
+      fetch: () => fetchYahooMarketPrice("BZ=F"),
+    },
+    {
+      key: "wti",
+      label: "🇺🇸 نفت WTI",
+      unit: "دلار به‌ازای هر بشکه",
+      source: "Yahoo Finance",
+      fetch: () => fetchYahooMarketPrice("CL=F"),
+    },
+    {
+      key: "gold",
+      label: "🥇 انس طلا",
+      unit: "دلار به‌ازای هر اونس",
+      source: "Coinbase",
+      fetch: fetchGoldUsd,
+    },
+    {
+      key: "silver",
+      label: "🥈 انس نقره",
+      unit: "دلار به‌ازای هر اونس",
+      source: "Yahoo Finance",
+      fetch: () => fetchYahooMarketPrice("SI=F"),
+    },
+    {
+      key: "platinum",
+      label: "⚪ انس پلاتین",
+      unit: "دلار به‌ازای هر اونس",
+      source: "Yahoo Finance",
+      fetch: () => fetchYahooMarketPrice("PL=F"),
+    },
+    {
+      key: "palladium",
+      label: "⚫ انس پالادیوم",
+      unit: "دلار به‌ازای هر اونس",
+      source: "Yahoo Finance",
+      fetch: () => fetchYahooMarketPrice("PA=F"),
+    },
+    {
+      key: "bitcoin",
+      label: "🪙 بیت‌کوین",
+      unit: "دلار",
+      source: "CoinGecko",
+      fetch: async () => {
+        const price = await fetchCoinGeckoUsd("bitcoin");
+        if (price === null) throw new Error("CoinGecko returned no Bitcoin price");
+        return price;
+      },
+    },
+  ];
+
+  return Promise.all(
+    sources.map(async ({ fetch, ...market }) => {
+      try {
+        return { ...market, price: await fetch() };
+      } catch (err) {
+        logger.warn({ err, market: market.key }, "Failed to fetch global market price");
+        return { ...market, price: null };
+      }
+    }),
+  );
 }
 
 interface CryptoRates {

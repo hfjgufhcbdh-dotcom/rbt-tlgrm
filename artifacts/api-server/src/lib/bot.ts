@@ -1,9 +1,12 @@
 import TelegramBot from "node-telegram-bot-api";
 import {
+  fetchGlobalMarketPrices,
   fetchCoinGeckoUsd,
   fetchCoinMarketData,
   fetchLivePrices,
   type CoinMarketData,
+  type GlobalMarketKey,
+  type GlobalMarketPrice,
 } from "./prices";
 import {
   generateChartBuffer,
@@ -56,6 +59,7 @@ const mainKeyboard = {
       { text: "🏦 سکه پارسیان", callback_data: "parsian_coin" },
     ],
     [{ text: "💵 قیمت ارز", callback_data: "currency" }],
+    [{ text: "🌍 بازارهای جهانی", callback_data: "global_markets" }],
     [{ text: "💎 ارز دیجیتال", callback_data: "crypto" }],
     [{ text: "🔎 مشخصات و کانترکت ارزها", callback_data: "crypto_info_menu" }],
     [{ text: "📊 همه قیمت‌ها", callback_data: "all" }],
@@ -63,6 +67,78 @@ const mainKeyboard = {
     [{ text: "🔔 هشدار قیمت", callback_data: "alerts_menu" }],
   ],
 };
+
+const GLOBAL_MARKET_OPTIONS: Array<{
+  key: GlobalMarketKey;
+  label: string;
+}> = [
+  { key: "brent", label: "🛢️ نفت برنت" },
+  { key: "wti", label: "🇺🇸 نفت WTI" },
+  { key: "gold", label: "🥇 انس طلا" },
+  { key: "silver", label: "🥈 انس نقره" },
+  { key: "platinum", label: "⚪ انس پلاتین" },
+  { key: "palladium", label: "⚫ انس پالادیوم" },
+  { key: "bitcoin", label: "🪙 بیت‌کوین" },
+];
+
+function globalMarketKeyboard() {
+  const rows: { text: string; callback_data: string }[][] = [];
+  for (let i = 0; i < GLOBAL_MARKET_OPTIONS.length; i += 2) {
+    const row = [
+      {
+        text: GLOBAL_MARKET_OPTIONS[i]!.label,
+        callback_data: `global_market_${GLOBAL_MARKET_OPTIONS[i]!.key}`,
+      },
+    ];
+    if (GLOBAL_MARKET_OPTIONS[i + 1]) {
+      row.push({
+        text: GLOBAL_MARKET_OPTIONS[i + 1]!.label,
+        callback_data: `global_market_${GLOBAL_MARKET_OPTIONS[i + 1]!.key}`,
+      });
+    }
+    rows.push(row);
+  }
+  rows.push([{ text: "💵 ارزها", callback_data: "currency" }]);
+  rows.push([{ text: "🏠 بازگشت به منو", callback_data: "menu" }]);
+  return { inline_keyboard: rows };
+}
+
+function globalMarketMenuText(): string {
+  return (
+    "🌍 *بازارهای جهانی*\n\n" +
+    "قیمت لحظه‌ای بازارهای جهانی را انتخاب کنید:"
+  );
+}
+
+function globalMarketAfterKeyboard(key: GlobalMarketKey) {
+  return {
+    inline_keyboard: [
+      [{ text: "🔄 بروزرسانی", callback_data: `global_market_${key}` }],
+      [{ text: "⬅️ بازارهای جهانی", callback_data: "global_markets" }],
+      [{ text: "🏠 بازگشت به منو", callback_data: "menu" }],
+    ],
+  };
+}
+
+function formatGlobalMarketPrice(price: number | null): string {
+  if (price === null) return "در دسترس نیست";
+  return `$${price.toLocaleString("en-US", {
+    minimumFractionDigits: price < 10 ? 2 : 0,
+    maximumFractionDigits: price < 10 ? 4 : 2,
+  })}`;
+}
+
+function formatGlobalMarketDetails(market: GlobalMarketPrice): string {
+  return (
+    `${market.label}\n\n` +
+    `💵 قیمت لحظه‌ای: *${formatGlobalMarketPrice(market.price)}*\n` +
+    `📏 واحد: ${market.unit}\n` +
+    `🌐 منبع: ${market.source}\n\n` +
+    (market.price === null
+      ? "❌ قیمت این بازار فعلاً از منبع داده دریافت نشد."
+      : "⚠️ این اطلاعات توصیهٔ سرمایه‌گذاری نیست.")
+  );
+}
 
 const CRYPTO_MARKET_OPTIONS = [
   { id: "bitcoin", label: "₿ بیت‌کوین (BTC)" },
@@ -473,6 +549,7 @@ const WELCOME =
   `🤖 *ربات قیمت طلا، سکه و ارز*\n\n` +
   `به ربات قیمت لحظه‌ای خوش آمدید!\n` +
   `قیمت‌ها به‌صورت لحظه‌ای از بازار دریافت می‌شوند.\n\n` +
+  `🌍 برای مشاهدهٔ نفت، فلزات گران‌بها و بیت‌کوین از گزینهٔ بازارهای جهانی استفاده کنید.\n\n` +
   `برای افزودن ارز به گزارش شبانه: \`/add_coin solana\`\n\n` +
   `یکی از گزینه‌ها را انتخاب کنید:`;
 
@@ -776,6 +853,54 @@ bot.on("callback_query", async (query) => {
         parse_mode: "Markdown",
         reply_markup: cryptoMarketAfterKeyboard(),
       });
+      return;
+    }
+
+    // ── Global markets ──
+    if (data === "global_markets") {
+      await bot.editMessageText(globalMarketMenuText(), {
+        chat_id: chatId,
+        message_id: msgId,
+        parse_mode: "Markdown",
+        reply_markup: globalMarketKeyboard(),
+      });
+      return;
+    }
+
+    if (data.startsWith("global_market_")) {
+      const key = data.slice("global_market_".length) as GlobalMarketKey;
+      const option = GLOBAL_MARKET_OPTIONS.find((market) => market.key === key);
+      if (!option) return;
+
+      await bot.editMessageText("⏳ در حال دریافت قیمت لحظه‌ای...", {
+        chat_id: chatId,
+        message_id: msgId,
+      });
+
+      try {
+        const markets = await fetchGlobalMarketPrices();
+        const market = markets.find((item) => item.key === key);
+        if (!market) {
+          throw new Error(`Missing global market result for ${key}`);
+        }
+
+        await bot.editMessageText(formatGlobalMarketDetails(market), {
+          chat_id: chatId,
+          message_id: msgId,
+          parse_mode: "Markdown",
+          reply_markup: globalMarketAfterKeyboard(key),
+        });
+      } catch (err) {
+        logger.error({ err, market: key }, "Failed to fetch global market price");
+        await bot.editMessageText(
+          "❌ دریافت قیمت این بازار ناموفق بود. لطفاً دوباره تلاش کنید.",
+          {
+            chat_id: chatId,
+            message_id: msgId,
+            reply_markup: globalMarketKeyboard(),
+          },
+        );
+      }
       return;
     }
 
