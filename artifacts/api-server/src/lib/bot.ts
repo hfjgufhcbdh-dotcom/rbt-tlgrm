@@ -69,6 +69,13 @@ const CRYPTO_MARKET_OPTIONS = [
   { id: "ethereum", label: "♦️ اتریوم (ETH)" },
   { id: "binancecoin", label: "🟡 بایننس‌کوین (BNB)" },
   { id: "solana", label: "🟣 سولانا (SOL)" },
+  { id: "ripple", label: "💧 ریپل (XRP)" },
+  { id: "dogecoin", label: "🐕 دوج‌کوین (DOGE)" },
+  { id: "cardano", label: "🔵 کاردانو (ADA)" },
+  { id: "tron", label: "🔴 ترون (TRX)" },
+  { id: "avalanche-2", label: "🔺 آوالانچ (AVAX)" },
+  { id: "polkadot", label: "⚫ پولکادات (DOT)" },
+  { id: "chainlink", label: "🔗 چین‌لینک (LINK)" },
   { id: "the-open-network", label: "💎 تون‌کوین (TON)" },
 ] as const;
 
