@@ -52,6 +52,10 @@ const ASSET_LABEL: Record<string, string> = Object.fromEntries(
   ASSET_OPTIONS.map((a) => [a.value, a.label])
 );
 
+function telegramKeyboardButton(text: string) {
+  return { text };
+}
+
 const mainKeyboard = {
   inline_keyboard: [
     [{ text: "🥇 قیمت طلا", callback_data: "gold" }],
@@ -68,6 +72,19 @@ const mainKeyboard = {
     [{ text: "📈 نمودار قیمت", callback_data: "chart_menu" }],
     [{ text: "🔔 هشدار قیمت", callback_data: "alerts_menu" }],
   ],
+};
+
+const mainMenu = {
+  reply_markup: {
+    keyboard: [
+      [telegramKeyboardButton("🛢️ نفت برنت"), telegramKeyboardButton("🇺🇸 نفت WTI")],
+      [telegramKeyboardButton("🥇 انس طلا"), telegramKeyboardButton("🥈 انس نقره")],
+      [telegramKeyboardButton("⚪ انس پلاتین"), telegramKeyboardButton("⚫ انس پالادیوم")],
+      [telegramKeyboardButton("🪙 بیت‌کوین"), telegramKeyboardButton("💵 ارزها")],
+      [telegramKeyboardButton("📊 مقایسه دارایی"), telegramKeyboardButton("🔄 تبدیل ارز به ارز")],
+    ],
+    resize_keyboard: true,
+  },
 };
 
 const GLOBAL_MARKET_OPTIONS: Array<{
@@ -381,6 +398,98 @@ async function finishConversion(
     );
   } finally {
     conversionPending.delete(chatId);
+  }
+}
+
+interface ComparisonState {
+  firstId?: string;
+}
+
+const comparisonPending = new Map<number, ComparisonState>();
+
+function comparisonAssetKeyboard(excludedId?: string) {
+  const assets = Object.values(CONVERSION_ASSETS)
+    .flat()
+    .filter((asset) => asset.id !== excludedId);
+
+  return {
+    keyboard: [
+      ...assets.map((asset) => [telegramKeyboardButton(asset.label)]),
+      [telegramKeyboardButton("🔙 بازگشت")],
+    ],
+    resize_keyboard: true,
+  };
+}
+
+async function startAssetComparison(chatId: number) {
+  comparisonPending.set(chatId, {});
+  await bot.sendMessage(
+    chatId,
+    "📊 مقایسه دارایی\n\nدارایی اول را انتخاب کنید:",
+    { reply_markup: comparisonAssetKeyboard() },
+  );
+}
+
+async function finishAssetComparison(
+  chatId: number,
+  state: ComparisonState,
+  secondLabel: string,
+) {
+  const first = state.firstId ? conversionAssetById(state.firstId) : undefined;
+  const second = Object.values(CONVERSION_ASSETS)
+    .flat()
+    .find((asset) => asset.label === secondLabel && asset.id !== state.firstId);
+
+  if (!first || !second) {
+    await bot.sendMessage(chatId, "❌ دارایی انتخاب‌شده معتبر نیست. دوباره تلاش کنید.");
+    return;
+  }
+
+  await bot.sendMessage(chatId, "⏳ در حال دریافت قیمت‌های زنده برای مقایسه...");
+
+  try {
+    const values = await fetchConversionUsdValues([first, second]);
+    const firstUsd = values.get(first.id);
+    const secondUsd = values.get(second.id);
+
+    if (
+      firstUsd === null ||
+      firstUsd === undefined ||
+      secondUsd === null ||
+      secondUsd === undefined
+    ) {
+      await bot.sendMessage(
+        chatId,
+        "❌ قیمت زندهٔ یکی از دارایی‌ها در دسترس نیست؛ مقایسه انجام نشد.",
+        { reply_markup: mainMenu.reply_markup },
+      );
+      return;
+    }
+
+    const ratio = firstUsd / secondUsd;
+    const ratioText = ratio.toLocaleString("fa-IR", { maximumFractionDigits: 8 });
+    await bot.sendMessage(
+      chatId,
+      "📊 *مقایسه دارایی*\n\n" +
+        `${first.label}: ${formatGlobalMarketPrice(firstUsd)}\n` +
+        `${second.label}: ${formatGlobalMarketPrice(secondUsd)}\n\n` +
+        `🔢 ارزش ۱ واحد ${first.label} تقریباً برابر با *${ratioText} واحد ${second.label}* است.\n\n` +
+        "📌 محاسبه بر اساس قیمت‌های زنده انجام شد.\n" +
+        "⚠️ این اطلاعات توصیهٔ سرمایه‌گذاری نیست.",
+      {
+        parse_mode: "Markdown",
+        reply_markup: mainMenu.reply_markup,
+      },
+    );
+  } catch (err) {
+    logger.error({ err, first: first.id, second: second.id }, "Failed to compare assets");
+    await bot.sendMessage(
+      chatId,
+      "❌ دریافت قیمت‌ها یا مقایسهٔ دارایی‌ها ناموفق بود. لطفاً دوباره تلاش کنید.",
+      { reply_markup: mainMenu.reply_markup },
+    );
+  } finally {
+    comparisonPending.delete(chatId);
   }
 }
 
@@ -867,7 +976,7 @@ bot.onText(/\/start/, async (msg) => {
 
   await bot.sendMessage(chatId, WELCOME, {
     parse_mode: "Markdown",
-    reply_markup: mainKeyboard,
+    reply_markup: mainMenu.reply_markup,
   });
 });
 
@@ -943,19 +1052,27 @@ bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text.trim();
 
+  if (text === "📊 مقایسه دارایی") {
+    conversionPending.delete(chatId);
+    await startAssetComparison(chatId);
+    return;
+  }
+
   if (text === "🔄 تبدیل ارز به ارز") {
+    comparisonPending.delete(chatId);
     await startConversion(chatId);
     return;
   }
 
-  if (conversionPending.has(chatId) && text === "🔙 بازگشت") {
+  if ((conversionPending.has(chatId) || comparisonPending.has(chatId)) && text === "🔙 بازگشت") {
     conversionPending.delete(chatId);
+    comparisonPending.delete(chatId);
     await bot.sendMessage(chatId, "📊 بازگشت به منوی اصلی", {
       reply_markup: { remove_keyboard: true },
     });
     await bot.sendMessage(chatId, WELCOME, {
       parse_mode: "Markdown",
-      reply_markup: mainKeyboard,
+      reply_markup: mainMenu.reply_markup,
     });
     return;
   }
@@ -1036,6 +1153,76 @@ bot.on("message", async (msg) => {
       await finishConversion(chatId, conversionState, text);
       return;
     }
+  }
+
+  const comparisonState = comparisonPending.get(chatId);
+  if (comparisonState) {
+    if (!comparisonState.firstId) {
+      const first = Object.values(CONVERSION_ASSETS)
+        .flat()
+        .find((asset) => asset.label === text);
+      if (!first) {
+        await bot.sendMessage(chatId, "❌ لطفاً یکی از دارایی‌های نمایش‌داده‌شده را انتخاب کنید.");
+        return;
+      }
+
+      comparisonPending.set(chatId, { firstId: first.id });
+      await bot.sendMessage(
+        chatId,
+        `📊 دارایی اول: ${first.label}\n\nدارایی دوم را برای مقایسه انتخاب کنید:`,
+        { reply_markup: comparisonAssetKeyboard(first.id) },
+      );
+      return;
+    }
+
+    await finishAssetComparison(chatId, comparisonState, text);
+    return;
+  }
+
+  const globalMarket = GLOBAL_MARKET_OPTIONS.find((market) => market.label === text);
+  if (globalMarket) {
+    await bot.sendMessage(chatId, "⏳ در حال دریافت قیمت لحظه‌ای...");
+    try {
+      const markets = await fetchGlobalMarketPrices();
+      const market = markets.find((item) => item.key === globalMarket.key);
+      if (!market) throw new Error(`Missing global market result for ${globalMarket.key}`);
+
+      await bot.sendMessage(chatId, formatGlobalMarketDetails(market), {
+        parse_mode: "Markdown",
+        reply_markup: mainMenu.reply_markup,
+      });
+    } catch (err) {
+      logger.error({ err, market: globalMarket.key }, "Failed to fetch main menu market price");
+      await bot.sendMessage(
+        chatId,
+        "❌ دریافت قیمت این بازار ناموفق بود. لطفاً دوباره تلاش کنید.",
+        { reply_markup: mainMenu.reply_markup },
+      );
+    }
+    return;
+  }
+
+  if (text === "💵 ارزها") {
+    try {
+      await bot.sendMessage(chatId, await getCurrencyText(), {
+        parse_mode: "Markdown",
+        reply_markup: mainMenu.reply_markup,
+      });
+    } catch (err) {
+      logger.error({ err }, "Failed to fetch currency prices from main menu");
+      await bot.sendMessage(chatId, "❌ دریافت قیمت ارزها ناموفق بود.", {
+        reply_markup: mainMenu.reply_markup,
+      });
+    }
+    return;
+  }
+
+  if (text === "🔙 بازگشت") {
+    await bot.sendMessage(chatId, WELCOME, {
+      parse_mode: "Markdown",
+      reply_markup: mainMenu.reply_markup,
+    });
+    return;
   }
 
   const state = pending.get(chatId);
