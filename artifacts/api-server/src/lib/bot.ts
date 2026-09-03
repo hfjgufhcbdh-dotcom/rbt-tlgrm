@@ -7,6 +7,7 @@ import {
   type CoinMarketData,
   type GlobalMarketKey,
   type GlobalMarketPrice,
+  type PriceData,
 } from "./prices";
 import {
   generateChartBuffer,
@@ -60,6 +61,7 @@ const mainKeyboard = {
     ],
     [{ text: "💵 قیمت ارز", callback_data: "currency" }],
     [{ text: "🌍 بازارهای جهانی", callback_data: "global_markets" }],
+    [{ text: "🔄 تبدیل ارز به ارز", callback_data: "convert_menu" }],
     [{ text: "💎 ارز دیجیتال", callback_data: "crypto" }],
     [{ text: "🔎 مشخصات و کانترکت ارزها", callback_data: "crypto_info_menu" }],
     [{ text: "📊 همه قیمت‌ها", callback_data: "all" }],
@@ -138,6 +140,248 @@ function formatGlobalMarketDetails(market: GlobalMarketPrice): string {
       ? "❌ قیمت این بازار فعلاً از منبع داده دریافت نشد."
       : "⚠️ این اطلاعات توصیهٔ سرمایه‌گذاری نیست.")
   );
+}
+
+type ConversionSource = "currency" | "domestic" | "global" | "crypto";
+
+interface ConversionAsset {
+  id: string;
+  label: string;
+  source: ConversionSource;
+  priceKey?: keyof PriceData;
+  currencyCode?: "USD" | "EUR" | "GBP" | "TRY" | "AED";
+  globalKey?: GlobalMarketKey;
+  coinId?: string;
+}
+
+const CONVERSION_ASSETS: Record<string, ConversionAsset[]> = {
+  "💵 ارز": [
+    { id: "usd", label: "🇺🇸 دلار", source: "currency", currencyCode: "USD" },
+    { id: "eur", label: "🇪🇺 یورو", source: "currency", currencyCode: "EUR", priceKey: "eur" },
+    { id: "gbp", label: "🇬🇧 پوند", source: "currency", currencyCode: "GBP", priceKey: "gbp" },
+    { id: "try", label: "🇹🇷 لیر", source: "currency", currencyCode: "TRY", priceKey: "tryL" },
+    { id: "aed", label: "🇦🇪 درهم", source: "currency", currencyCode: "AED", priceKey: "aed" },
+  ],
+  "🥇 طلا": [
+    { id: "gold_ounce", label: "🥇 انس طلا", source: "global", globalKey: "gold" },
+    { id: "gold18", label: "🟡 طلای ۱۸ عیار", source: "domestic", priceKey: "gold18" },
+    { id: "gold24", label: "🟡 طلای ۲۴ عیار", source: "domestic", priceKey: "gold24" },
+    { id: "gold_used", label: "🟡 طلای دست دوم", source: "domestic", priceKey: "gold18" },
+  ],
+  "🪙 سکه": [
+    { id: "parsian", label: "🪙 سکه پارسیان", source: "domestic", priceKey: "parsian1g" },
+    { id: "emami", label: "🪙 سکه امامی", source: "domestic", priceKey: "emamiCoin" },
+    { id: "half", label: "🪙 نیم سکه", source: "domestic", priceKey: "halfCoin" },
+    { id: "quarter", label: "🪙 ربع سکه", source: "domestic", priceKey: "quarterCoin" },
+    { id: "gram", label: "🪙 سکه گرمی", source: "domestic" },
+  ],
+  "🛢️ نفت": [
+    { id: "brent", label: "🛢️ نفت برنت", source: "global", globalKey: "brent" },
+    { id: "wti", label: "🇺🇸 نفت WTI", source: "global", globalKey: "wti" },
+  ],
+  "🪙 رمزارزها": [
+    { id: "bitcoin", label: "₿ بیت‌کوین", source: "crypto", coinId: "bitcoin" },
+    { id: "ethereum", label: "♦️ اتریوم", source: "crypto", coinId: "ethereum" },
+    { id: "binancecoin", label: "🟡 بایننس‌کوین", source: "crypto", coinId: "binancecoin" },
+    { id: "solana", label: "🟣 سولانا", source: "crypto", coinId: "solana" },
+    { id: "ripple", label: "💧 ریپل", source: "crypto", coinId: "ripple" },
+    { id: "dogecoin", label: "🐕 دوج‌کوین", source: "crypto", coinId: "dogecoin" },
+    { id: "cardano", label: "🔵 کاردانو", source: "crypto", coinId: "cardano" },
+    { id: "tron", label: "🔴 ترون", source: "crypto", coinId: "tron" },
+    { id: "avalanche-2", label: "🔺 آوالانچ", source: "crypto", coinId: "avalanche-2" },
+    { id: "polkadot", label: "⚫ پولکادات", source: "crypto", coinId: "polkadot" },
+    { id: "chainlink", label: "🔗 چین‌لینک", source: "crypto", coinId: "chainlink" },
+    { id: "the-open-network", label: "💎 TON", source: "crypto", coinId: "the-open-network" },
+  ],
+};
+
+function conversionButton(text: string) {
+  return { text };
+}
+
+const CONVERSION_MENU_KEYBOARD = {
+  keyboard: [
+    [conversionButton("💵 ارز"), conversionButton("🥇 طلا")],
+    [conversionButton("🪙 سکه"), conversionButton("🛢️ نفت")],
+    [conversionButton("🪙 رمزارزها")],
+    [conversionButton("🔙 بازگشت")],
+  ],
+  resize_keyboard: true,
+};
+
+type ConversionStep = "category" | "source" | "target" | "amount";
+
+interface ConversionState {
+  step: ConversionStep;
+  category?: string;
+  sourceId?: string;
+  targetId?: string;
+}
+
+const conversionPending = new Map<number, ConversionState>();
+
+function conversionAssetsForCategory(category: string): ConversionAsset[] {
+  return CONVERSION_ASSETS[category] ?? [];
+}
+
+function conversionAssetById(id: string): ConversionAsset | undefined {
+  return Object.values(CONVERSION_ASSETS)
+    .flat()
+    .find((asset) => asset.id === id);
+}
+
+function conversionAssetKeyboard(assets: ConversionAsset[]) {
+  return {
+    keyboard: [
+      ...assets.map((asset) => [conversionButton(asset.label)]),
+      [conversionButton("🔙 بازگشت")],
+    ],
+    resize_keyboard: true,
+  };
+}
+
+async function startConversion(chatId: number) {
+  conversionPending.set(chatId, { step: "category" });
+  await bot.sendMessage(
+    chatId,
+    "🔄 تبدیل ارز به ارز\n\nابتدا نوع دارایی را انتخاب کنید:",
+    { reply_markup: CONVERSION_MENU_KEYBOARD },
+  );
+}
+
+function parseNumericPrice(value: string): number | null {
+  const normalized = value
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+    .replace(/[٬،,]/g, "")
+    .replace(/[^\d.-]/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseConversionAmount(value: string): number | null {
+  const normalized = value
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+    .replace(/[٬،,]/g, "")
+    .replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function fetchConversionUsdValues(
+  selectedAssets: ConversionAsset[],
+): Promise<Map<string, number | null>> {
+  const needsLivePrices = selectedAssets.some(
+    (asset) => asset.source === "currency" || asset.source === "domestic",
+  );
+  const needsGlobalMarkets = selectedAssets.some((asset) => asset.source === "global");
+  const cryptoIds = selectedAssets
+    .filter((asset) => asset.source === "crypto" && asset.coinId)
+    .map((asset) => asset.coinId!);
+
+  const [livePrices, globalMarkets, cryptoMarkets] = await Promise.all([
+    needsLivePrices ? fetchLivePrices() : Promise.resolve<PriceData | null>(null),
+    needsGlobalMarkets
+      ? fetchGlobalMarketPrices()
+      : Promise.resolve<GlobalMarketPrice[]>([]),
+    cryptoIds.length
+      ? fetchCoinMarketData(cryptoIds).catch((err) => {
+          logger.warn({ err }, "Failed to fetch conversion crypto prices");
+          return [] as CoinMarketData[];
+        })
+      : Promise.resolve<CoinMarketData[]>([]),
+  ]);
+
+  const values = new Map<string, number | null>();
+  const usdToman = livePrices ? parseNumericPrice(livePrices.usd) : null;
+  const globalByKey = new Map(globalMarkets.map((market) => [market.key, market]));
+  const cryptoById = new Map(cryptoMarkets.map((market) => [market.id, market]));
+
+  for (const asset of selectedAssets) {
+    let usdValue: number | null = null;
+
+    if (asset.source === "currency") {
+      if (asset.currencyCode === "USD") {
+        usdValue = 1;
+      } else if (livePrices && usdToman && asset.priceKey) {
+        const tomanPrice = parseNumericPrice(String(livePrices[asset.priceKey]));
+        usdValue = tomanPrice === null ? null : tomanPrice / usdToman;
+      }
+    } else if (asset.source === "domestic") {
+      if (livePrices && usdToman && asset.priceKey) {
+        const tomanPrice = parseNumericPrice(String(livePrices[asset.priceKey]));
+        usdValue = tomanPrice === null ? null : tomanPrice / usdToman;
+      }
+    } else if (asset.source === "global" && asset.globalKey) {
+      usdValue = globalByKey.get(asset.globalKey)?.price ?? null;
+    } else if (asset.source === "crypto" && asset.coinId) {
+      usdValue = cryptoById.get(asset.coinId)?.current_price ?? null;
+    }
+
+    values.set(asset.id, usdValue);
+  }
+
+  return values;
+}
+
+async function finishConversion(
+  chatId: number,
+  state: ConversionState,
+  rawAmount: string,
+) {
+  const amount = parseConversionAmount(rawAmount);
+  const source = state.sourceId ? conversionAssetById(state.sourceId) : undefined;
+  const target = state.targetId ? conversionAssetById(state.targetId) : undefined;
+
+  if (!amount || !source || !target) {
+    await bot.sendMessage(chatId, "❌ مقدار یا دارایی انتخاب‌شده معتبر نیست. دوباره تلاش کنید.");
+    return;
+  }
+
+  await bot.sendMessage(chatId, "⏳ در حال دریافت قیمت‌های زنده و محاسبه تبدیل...");
+
+  try {
+    const values = await fetchConversionUsdValues([source, target]);
+    const sourceUsd = values.get(source.id);
+    const targetUsd = values.get(target.id);
+
+    if (sourceUsd === null || sourceUsd === undefined || targetUsd === null || targetUsd === undefined) {
+      await bot.sendMessage(
+        chatId,
+        "❌ قیمت زندهٔ یکی از دارایی‌ها در دسترس نیست؛ بنابراین تبدیل انجام نشد.",
+        { reply_markup: CONVERSION_MENU_KEYBOARD },
+      );
+      conversionPending.delete(chatId);
+      return;
+    }
+
+    const converted = (amount * sourceUsd) / targetUsd;
+    const amountText = amount.toLocaleString("fa-IR", { maximumFractionDigits: 8 });
+    const convertedText = converted.toLocaleString("fa-IR", {
+      maximumFractionDigits: 8,
+    });
+
+    await bot.sendMessage(
+      chatId,
+      "🔄 *نتیجه تبدیل*\n\n" +
+        `مقدار مبدأ: ${amountText} ${source.label}\n` +
+        `مقدار مقصد: *${convertedText} ${target.label}*\n\n` +
+        "📌 محاسبه بر اساس قیمت‌های زنده انجام شد.\n" +
+        "⚠️ این اطلاعات توصیهٔ سرمایه‌گذاری نیست.",
+      {
+        parse_mode: "Markdown",
+        reply_markup: CONVERSION_MENU_KEYBOARD,
+      },
+    );
+  } catch (err) {
+    logger.error({ err, source: source.id, target: target.id }, "Failed to calculate conversion");
+    await bot.sendMessage(
+      chatId,
+      "❌ دریافت قیمت‌ها یا محاسبهٔ تبدیل ناموفق بود. لطفاً دوباره تلاش کنید.",
+      { reply_markup: CONVERSION_MENU_KEYBOARD },
+    );
+  } finally {
+    conversionPending.delete(chatId);
+  }
 }
 
 const CRYPTO_MARKET_OPTIONS = [
@@ -697,6 +941,103 @@ bot.onText(/\/stats/, async (msg) => {
 bot.on("message", async (msg) => {
   if (!msg.text || msg.text.startsWith("/")) return;
   const chatId = msg.chat.id;
+  const text = msg.text.trim();
+
+  if (text === "🔄 تبدیل ارز به ارز") {
+    await startConversion(chatId);
+    return;
+  }
+
+  if (conversionPending.has(chatId) && text === "🔙 بازگشت") {
+    conversionPending.delete(chatId);
+    await bot.sendMessage(chatId, "📊 بازگشت به منوی اصلی", {
+      reply_markup: { remove_keyboard: true },
+    });
+    await bot.sendMessage(chatId, WELCOME, {
+      parse_mode: "Markdown",
+      reply_markup: mainKeyboard,
+    });
+    return;
+  }
+
+  const conversionState = conversionPending.get(chatId);
+  if (conversionState) {
+    if (conversionState.step === "category") {
+      const categoryAssets = conversionAssetsForCategory(text);
+      if (categoryAssets.length === 0) {
+        await bot.sendMessage(chatId, "❌ لطفاً یکی از دسته‌های نمایش‌داده‌شده را انتخاب کنید.");
+        return;
+      }
+
+      conversionPending.set(chatId, {
+        step: "source",
+        category: text,
+      });
+      await bot.sendMessage(
+        chatId,
+        `🔄 تبدیل ارز به ارز\n\nنوع انتخاب‌شده: ${text}\n\nدارایی مبدأ را انتخاب کنید:`,
+        { reply_markup: conversionAssetKeyboard(categoryAssets) },
+      );
+      return;
+    }
+
+    if (conversionState.step === "source") {
+      const categoryAssets = conversionAssetsForCategory(conversionState.category ?? "");
+      const source = categoryAssets.find((asset) => asset.label === text);
+      if (!source) {
+        await bot.sendMessage(chatId, "❌ لطفاً یکی از دارایی‌های نمایش‌داده‌شده را انتخاب کنید.");
+        return;
+      }
+
+      conversionPending.set(chatId, {
+        ...conversionState,
+        step: "target",
+        sourceId: source.id,
+      });
+      await bot.sendMessage(
+        chatId,
+        `🔄 دارایی مبدأ: ${source.label}\n\nدارایی مقصد را انتخاب کنید:`,
+        {
+          reply_markup: conversionAssetKeyboard(
+            categoryAssets.filter((asset) => asset.id !== source.id),
+          ),
+        },
+      );
+      return;
+    }
+
+    if (conversionState.step === "target") {
+      const categoryAssets = conversionAssetsForCategory(conversionState.category ?? "");
+      const target = categoryAssets.find((asset) => asset.label === text);
+      if (!target || target.id === conversionState.sourceId) {
+        await bot.sendMessage(chatId, "❌ لطفاً یکی از دارایی‌های مقصد نمایش‌داده‌شده را انتخاب کنید.");
+        return;
+      }
+
+      conversionPending.set(chatId, {
+        ...conversionState,
+        step: "amount",
+        targetId: target.id,
+      });
+      await bot.sendMessage(
+        chatId,
+        `🔄 تبدیل ${conversionAssetById(conversionState.sourceId ?? "")?.label ?? "دارایی مبدأ"} به ${target.label}\n\nمقدار مبدأ را به‌صورت عددی وارد کنید:`,
+        {
+          reply_markup: {
+            keyboard: [[conversionButton("🔙 بازگشت")]],
+            resize_keyboard: true,
+          },
+        },
+      );
+      return;
+    }
+
+    if (conversionState.step === "amount") {
+      await finishConversion(chatId, conversionState, text);
+      return;
+    }
+  }
+
   const state = pending.get(chatId);
   if (!state || state.step !== "price") return;
 
@@ -762,6 +1103,12 @@ bot.on("callback_query", async (query) => {
         parse_mode: "Markdown",
         reply_markup: mainKeyboard,
       });
+      return;
+    }
+
+    // ── Currency conversion ──
+    if (data === "convert_menu") {
+      await startConversion(chatId);
       return;
     }
 
