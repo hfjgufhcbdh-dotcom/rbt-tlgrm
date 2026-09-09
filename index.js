@@ -1,16 +1,32 @@
-const TelegramBot = require('node-telegram-bot-api');
+export default {
+  async fetch(request, env) {
+    if (request.method !== "POST") {
+      return new Response("Bot is running!", { status: 200 });
+    }
 
-// توکن ربات تلگرام خودت را اینجا بگذار
-const token = process.env.YOUR_TELEGRAM_BOT_TOKEN;
+    const update = await request.json();
 
-const bot = new TelegramBot(token, { polling: true });
+    if (update.message) {
+      const chatId = update.message.chat.id;
+      const text = update.message.text || "";
 
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
+      console.log(`Received message: ${text}`);
 
-  console.log(`Received message: ${text}`);
-  bot.sendMessage(chatId, 'ربات با موفقیت روشن شد و پیام شما را دریافت کرد!');
-});
+      await fetch(
+        `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: "ربات با موفقیت روشن شد و پیام شما را دریافت کرد!"
+          })
+        }
+      );
+    }
 
-console.log("Bot is running and waiting for messages...");
+    return new Response("OK", { status: 200 });
+  }
+};
