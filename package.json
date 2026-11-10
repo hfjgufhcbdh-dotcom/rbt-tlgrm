@@ -1,11 +1,19 @@
 {
   "name": "rbt-tlgrm",
   "version": "1.0.0",
+  "private": true,
+  "type": "module",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
+  "engines": {
+    "node": ">=22.12.0"
   },
-  "dependencies": {
-    "node-telegram-bot-api": "^0.61.0"
+  "scripts": {
+    "build": "pnpm --filter @workspace/api-server build",
+    "start": "pnpm run build && node --enable-source-maps index.js",
+    "typecheck": "pnpm --filter @workspace/api-server typecheck"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3",
+    "typescript": "~5.9.3"
   }
 }
